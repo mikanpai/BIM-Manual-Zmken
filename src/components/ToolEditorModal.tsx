@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Language, RibbonCategoryId, ToolItem, StepItem, MediaItem, SubOptionItem, PreviewBoxItem } from '../types/manual';
-import { CATEGORIES } from '../data/defaultManual';
+import { CategoryInfo, Language, RibbonCategoryId, ToolItem, StepItem, MediaItem, SubOptionItem, PreviewBoxItem } from '../types/manual';
 import { 
   X, Check, Plus, Trash2, Upload, Image as ImageIcon, 
   HelpCircle, AlertTriangle, Layers, Film, ArrowUp, ArrowDown,
   ListTree, ChevronDown, CheckCircle2, Sparkles
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
+import { uploadMediaFile } from '../lib/supabase';
 
 interface ToolEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   tool: ToolItem | null; // null if creating a new tool
+  categories: CategoryInfo[];
+  defaultCategoryId?: RibbonCategoryId;
   onSave: (savedTool: ToolItem) => void;
   lang: Language;
 }
@@ -20,13 +22,15 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   isOpen,
   onClose,
   tool,
+  categories,
+  defaultCategoryId,
   onSave,
   lang,
 }) => {
   const isEditing = !!tool;
 
   const [categoryId, setCategoryId] = useState<RibbonCategoryId>(
-    tool ? tool.categoryId : 'architecture'
+    tool ? tool.categoryId : (defaultCategoryId || categories[0]?.id || '')
   );
   const [subgroupJa, setSubgroupJa] = useState(tool ? tool.subgroup.ja : '意匠部材');
   const [subgroupEn, setSubgroupEn] = useState(tool ? tool.subgroup.en : 'Architectural Component');
@@ -212,7 +216,10 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
       setWarningsEn(warnEnList);
     } else {
       // New tool defaults
-      setCategoryId('architecture');
+      // Only categories currently configured for the ribbon can be assigned.
+      setCategoryId(defaultCategoryId && categories.some((category) => category.id === defaultCategoryId)
+        ? defaultCategoryId
+        : (categories[0]?.id || ''));
       setSubgroupJa('意匠部材');
       setSubgroupEn('Architectural Component');
       setNameJa('');
@@ -255,19 +262,15 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
     }
     setEditLang(lang === 'en' ? 'en' : 'ja');
     setActiveTab('basic');
-  }, [tool, isOpen, lang]);
+  }, [tool, isOpen, lang, categories, defaultCategoryId]);
 
   if (!isOpen) return null;
 
   // Custom Icon File Upload Handler
-  const handleCustomIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setCustomIconUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setCustomIconUrl(await uploadMediaFile(file, 'icons')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Preview Box handlers
@@ -309,31 +312,19 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
     setPreviewBoxes(updated);
   };
 
-  const handleBoxLogoUpload = (index: number, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      updatePreviewBox(index, 'logoIconUrl', e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handleBoxLogoUpload = async (index: number, file: File) => {
+    try { updatePreviewBox(index, 'logoIconUrl', await uploadMediaFile(file, 'preview-icons')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
-  const handleBoxGifUpload = (index: number, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      updatePreviewBox(index, 'gifUrl', e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handleBoxGifUpload = async (index: number, file: File) => {
+    try { updatePreviewBox(index, 'gifUrl', await uploadMediaFile(file, 'preview-media')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Simulator GIF Upload Handler
-  const handleSimulatorGifUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSimulatorGifUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setSimulatorGifUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setSimulatorGifUrl(await uploadMediaFile(file, 'simulator-media')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Sub-option handlers
@@ -404,22 +395,20 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   };
 
   // Media handlers (Image/GIF upload & URL)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, targetStepIndex?: number) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetStepIndex?: number) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
     const isWebp = file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp');
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      const mediaUrl = await uploadMediaFile(file, 'tool-media');
       if (typeof targetStepIndex === 'number') {
-        updateStep(targetStepIndex, 'mediaUrl', dataUrl);
+        updateStep(targetStepIndex, 'mediaUrl', mediaUrl);
       } else {
         const newMedia: MediaItem = {
           id: `m-${Date.now()}`,
-          url: dataUrl,
+          url: mediaUrl,
           title: {
             ja: file.name.replace(/\.[^/.]+$/, ''),
             en: file.name.replace(/\.[^/.]+$/, '')
@@ -433,8 +422,9 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
         };
         setMediaList([...mediaList, newMedia]);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Upload failed.');
+    }
   };
 
   const addMediaUrl = () => {
@@ -705,7 +695,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                     onChange={(e) => setCategoryId(e.target.value as RibbonCategoryId)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
                   >
-                    {CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {lang === 'ja' ? c.name.ja : c.name.en}
                       </option>

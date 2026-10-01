@@ -21,6 +21,7 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
 import { ImageLightboxModal } from './components/ImageLightboxModal';
 import { Plus, Search, Sparkles, Building2, HelpCircle } from 'lucide-react';
+import { loadSharedManualState, saveSharedManualState } from './lib/supabase';
 
 const STORAGE_KEY_TOOLS = 'gloobe_manual_tools_v1';
 const STORAGE_KEY_COMPANY = 'gloobe_manual_company_v1';
@@ -28,6 +29,8 @@ const STORAGE_KEY_LANG = 'gloobe_manual_lang_v1';
 const STORAGE_KEY_CATEGORIES = 'gloobe_manual_categories_v1';
 
 export default function App() {
+  const [sharedStateReady, setSharedStateReady] = useState(false);
+  const [sharedStateAvailable, setSharedStateAvailable] = useState(false);
   // 1. Language state
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_LANG);
@@ -118,6 +121,32 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_LANG, lang);
   }, [lang]);
+
+  // Load the shared manual after the local fallback is ready. A configured
+  // Supabase project becomes the source of truth for every browser/device.
+  useEffect(() => {
+    let cancelled = false;
+    loadSharedManualState().then(({ state, available }) => {
+      if (cancelled) return;
+      if (state?.categories && Array.isArray(state.categories)) setCategories(state.categories as CategoryInfo[]);
+      if (state?.companySettings) setCompanySettings(state.companySettings as CompanySettings);
+      if (state?.tools && Array.isArray(state.tools)) setTools(state.tools as ToolItem[]);
+      setSharedStateAvailable(available);
+      setSharedStateReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Debounce cloud saves to avoid one write for every keystroke in an editor.
+  useEffect(() => {
+    if (!sharedStateReady || !sharedStateAvailable) return;
+    const timeout = window.setTimeout(() => {
+      saveSharedManualState({ categories, companySettings, tools }).catch((error) => {
+        console.warn('[Supabase] Shared manual sync failed:', error);
+      });
+    }, 750);
+    return () => window.clearTimeout(timeout);
+  }, [categories, companySettings, sharedStateAvailable, sharedStateReady, tools]);
 
   // Handle URL hash on initial load
   useEffect(() => {
@@ -423,6 +452,8 @@ export default function App() {
           isOpen={isEditorOpen}
           onClose={() => setIsEditorOpen(false)}
           tool={editingTool}
+          categories={categories}
+          defaultCategoryId={activeRibbonCategory}
           onSave={handleSaveTool}
           lang={lang}
         />
