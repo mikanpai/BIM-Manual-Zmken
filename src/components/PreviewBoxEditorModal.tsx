@@ -5,6 +5,7 @@ import {
   Video, ArrowUp, ArrowDown, MoveUp, MoveDown 
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
+import { uploadMediaFile } from '../lib/supabase';
 
 interface PreviewBoxEditorModalProps {
   isOpen: boolean;
@@ -126,14 +127,10 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
   if (!isOpen) return null;
 
   // Handle logo image upload
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setLogoIconUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setLogoIconUrl(await uploadMediaFile(file, 'preview-icons')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Add new media item (GIF or WebM video)
@@ -156,7 +153,7 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
   };
 
   // Handle media file upload
-  const handleMediaFileUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaFileUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const isVideoFile = file.type.includes('webm') || file.type.includes('mp4') || file.name.toLowerCase().endsWith('.webm') || file.name.toLowerCase().endsWith('.mp4');
@@ -169,17 +166,15 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
     else if (isGifFile) detectedType = 'gif';
     else detectedType = 'image';
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
+    try {
       const updated = [...mediaList];
       updated[index] = {
         ...updated[index],
-        url: event.target?.result as string,
+        url: await uploadMediaFile(file, 'preview-media'),
         type: detectedType,
       };
       setMediaList(updated);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   const handleUpdateMedia = (index: number, updates: Partial<PreviewMediaItem>) => {
