@@ -233,11 +233,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
     const cat = localCategories[index];
     const confirmMsg = lang === 'ja'
-      ? `カテゴリ「${cat.name.ja}」を削除しますか？`
-      : `Delete category "${cat.name.en}"?`;
+      ? `カテゴリ「${cat.name.ja}」と、このカテゴリ内の${localTools.filter((tool) => tool.categoryId === cat.id).length}件のツールを削除しますか？`
+      : `Delete category "${cat.name.en}" and its ${localTools.filter((tool) => tool.categoryId === cat.id).length} tool(s)?`;
     if (window.confirm(confirmMsg)) {
       const updated = localCategories.filter((_, i) => i !== index);
       setLocalCategories(updated);
+      // A deleted ribbon category must not leave orphan tools to reappear
+      // after saving/reloading the shared manual state.
+      setLocalTools((currentTools) => currentTools.filter((tool) => tool.categoryId !== cat.id));
       if (selectedCatId === cat.id) {
         setSelectedCatId(updated[0].id);
       }
@@ -2137,8 +2140,8 @@ VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`}
                   </div>
                   <ol className="list-decimal list-inside space-y-1 text-[11px] text-sky-800">
                     <li>{lang === 'ja' ? 'Supabaseダッシュボードの「Storage」を開き、「New Bucket」で「gloobe-assets」という名前のバケットを作成（Public BucketをON）にします。' : 'In Supabase Dashboard → Storage, create a public bucket named "gloobe-assets" (Public Bucket: ON).'}</li>
-                    <li>{lang === 'ja' ? 'GLOOBEのCAD操作画面を録画したGIFやWebMファイルをアップロードします。' : 'Upload your recorded GIF or WebM files.'}</li>
-                    <li>{lang === 'ja' ? 'アップロードしたファイルの「Get URL」で公開URLをコピーし、上記の gloobe_media テーブルの media_url に登録します。' : 'Copy the public URL and insert into gloobe_media table media_url.'}</li>
+                    <li>{lang === 'ja' ? 'SQLスキーマを実行後、エディタのファイル選択でGIF、WebP、WebM、画像を選択すると、自動的にこのバケットへアップロードされます。' : 'After running the SQL schema, choosing a GIF, WebP, WebM, or image in an editor uploads it to this bucket automatically.'}</li>
+                    <li>{lang === 'ja' ? 'エディタは公開Storage URLとマニュアル設定をSupabaseに保存するため、同じ環境変数で公開したサイトなら別の端末でも表示されます。' : 'The editor saves the public Storage URL and manual configuration to Supabase, so any deployment with these environment variables shows the same media.'}</li>
                   </ol>
                 </div>
 
