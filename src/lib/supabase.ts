@@ -56,9 +56,12 @@ CREATE INDEX IF NOT EXISTS idx_gloobe_preview_sort ON public.gloobe_preview_tool
 -- Row Level Security (RLS) for gloobe_preview_tools
 ALTER TABLE public.gloobe_preview_tools ENABLE ROW LEVEL SECURITY;
 
+-- Drop first so this full schema can be safely re-run in the SQL Editor.
+DROP POLICY IF EXISTS "Allow public read access on preview tools" ON public.gloobe_preview_tools;
 CREATE POLICY "Allow public read access on preview tools" 
 ON public.gloobe_preview_tools FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow public insert/update on preview tools" ON public.gloobe_preview_tools;
 CREATE POLICY "Allow public insert/update on preview tools" 
 ON public.gloobe_preview_tools FOR ALL USING (true) WITH CHECK (true);
 
@@ -108,9 +111,11 @@ CREATE INDEX IF NOT EXISTS idx_gloobe_media_sort ON public.gloobe_media(sort_ord
 
 ALTER TABLE public.gloobe_media ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow public read access on gloobe_media" ON public.gloobe_media;
 CREATE POLICY "Allow public read access on gloobe_media" 
 ON public.gloobe_media FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow public insert/update on gloobe_media" ON public.gloobe_media;
 CREATE POLICY "Allow public insert/update on gloobe_media" 
 ON public.gloobe_media FOR ALL USING (true) WITH CHECK (true);
 
@@ -126,8 +131,10 @@ CREATE TABLE IF NOT EXISTS public.gloobe_manual_state (
 );
 
 ALTER TABLE public.gloobe_manual_state ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read access on manual state" ON public.gloobe_manual_state;
 CREATE POLICY "Allow public read access on manual state"
 ON public.gloobe_manual_state FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow public write access on manual state" ON public.gloobe_manual_state;
 CREATE POLICY "Allow public write access on manual state"
 ON public.gloobe_manual_state FOR ALL USING (true) WITH CHECK (true);
 
@@ -139,8 +146,10 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('gloobe-assets', 'gloobe-assets', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
+DROP POLICY IF EXISTS "Public read access for GLOOBE assets" ON storage.objects;
 CREATE POLICY "Public read access for GLOOBE assets"
 ON storage.objects FOR SELECT USING (bucket_id = 'gloobe-assets');
+DROP POLICY IF EXISTS "Public uploads for GLOOBE assets" ON storage.objects;
 CREATE POLICY "Public uploads for GLOOBE assets"
 ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'gloobe-assets');
 
