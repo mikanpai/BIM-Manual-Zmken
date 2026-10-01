@@ -160,6 +160,7 @@ export interface SupabaseConfig {
   url: string;
   anonKey: string;
   tableName: string;
+  storageBucket: string;
   autoSync: boolean;
   isConnected?: boolean;
   lastSyncAt?: string;
