@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { CompanySettings, Language, PreviewBoxItem, StepItem, SubOptionItem, ToolItem } from '../types/manual';
-import { CATEGORIES } from '../data/defaultManual';
+import { CategoryInfo, CompanySettings, Language, PreviewBoxItem, StepItem, SubOptionItem, ToolItem } from '../types/manual';
 import { CadIcon } from './CadIcon';
 import { InteractiveCadCanvas } from './InteractiveCadCanvas';
 import { 
@@ -13,6 +12,7 @@ import { SubOptionEditorModal } from './SubOptionEditorModal';
 
 interface SubOptionDetailPageProps {
   tool: ToolItem; // Parent tool
+  categories: CategoryInfo[];
   subOption: SubOptionItem;
   companySettings: CompanySettings;
   lang: Language;
@@ -25,6 +25,7 @@ interface SubOptionDetailPageProps {
 
 export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
   tool,
+  categories,
   subOption,
   companySettings,
   lang,
@@ -44,7 +45,7 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
   // Sub-option Editor Modal State
   const [isSubEditorOpen, setIsSubEditorOpen] = useState(false);
 
-  const category = CATEGORIES.find((c) => c.id === tool.categoryId) || CATEGORIES[0];
+  const category = categories.find((c) => c.id === tool.categoryId);
 
   // Default preview boxes if none yet
   const defaultPreviewBox: PreviewBoxItem = {
@@ -177,7 +178,7 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
           <ChevronRight className="w-3.5 h-3.5 text-stone-400 shrink-0" />
           
           <span className="text-stone-600 whitespace-nowrap">
-            {lang === 'ja' ? category.name.ja : category.name.en}
+            {category ? (lang === 'ja' ? category.name.ja : category.name.en) : tool.categoryId}
           </span>
 
           <ChevronRight className="w-3.5 h-3.5 text-stone-400 shrink-0" />

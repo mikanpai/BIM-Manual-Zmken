@@ -21,13 +21,22 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
 import { ImageLightboxModal } from './components/ImageLightboxModal';
 import { Plus, Search, Sparkles, Building2, HelpCircle } from 'lucide-react';
+import { loadSharedManualState, saveSharedManualState } from './lib/supabase';
 
 const STORAGE_KEY_TOOLS = 'gloobe_manual_tools_v1';
 const STORAGE_KEY_COMPANY = 'gloobe_manual_company_v1';
 const STORAGE_KEY_LANG = 'gloobe_manual_lang_v1';
 const STORAGE_KEY_CATEGORIES = 'gloobe_manual_categories_v1';
 
+/** Tools cannot exist in the ribbon once their category has been removed. */
+const keepToolsInCategories = (toolList: ToolItem[], categoryList: CategoryInfo[]) => {
+  const categoryIds = new Set(categoryList.map((category) => category.id));
+  return toolList.filter((tool) => categoryIds.has(tool.categoryId));
+};
+
 export default function App() {
+  const [sharedStateReady, setSharedStateReady] = useState(false);
+  const [sharedStateAvailable, setSharedStateAvailable] = useState(false);
   // 1. Language state
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_LANG);
@@ -60,7 +69,7 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_TOOLS);
       if (!saved) return INITIAL_TOOLS;
       const parsed: ToolItem[] = JSON.parse(saved);
-      return parsed.map((tool) => {
+      return keepToolsInCategories(parsed.map((tool) => {
         const initial = INITIAL_TOOLS.find((t) => t.id === tool.id);
         const cleanedTool = { ...tool };
         delete (cleanedTool as any).badge;
@@ -68,14 +77,15 @@ export default function App() {
           return { ...cleanedTool, subOptions: initial.subOptions };
         }
         return cleanedTool;
-      });
+      }), categories);
     } catch {
       return INITIAL_TOOLS;
     }
   });
 
   // 5. UI / Navigation state
-  const [activeRibbonCategory, setActiveRibbonCategory] = useState<RibbonCategoryId>('architecture');
+  const [activeRibbonCategory, setActiveRibbonCategory] = useState<RibbonCategoryId>(() => categories[0]?.id || '');
+  const [isRibbonPaletteVisible, setIsRibbonPaletteVisible] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolItem | null>(null);
   
   // USER REQUESTED: Dedicated separate page for sub-options
@@ -119,6 +129,45 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY_LANG, lang);
   }, [lang]);
 
+  // Load the shared manual after the local fallback is ready. A configured
+  // Supabase project becomes the source of truth for every browser/device.
+  useEffect(() => {
+    let cancelled = false;
+    loadSharedManualState().then(({ state, available }) => {
+      if (cancelled) return;
+      const sharedCategories = state?.categories && Array.isArray(state.categories)
+        ? state.categories as CategoryInfo[]
+        : categories;
+      if (state?.categories && Array.isArray(state.categories)) setCategories(sharedCategories);
+      if (state?.companySettings) setCompanySettings(state.companySettings as CompanySettings);
+      setTools(keepToolsInCategories(
+        state?.tools && Array.isArray(state.tools) ? state.tools as ToolItem[] : tools,
+        sharedCategories,
+      ));
+      setSharedStateAvailable(available);
+      setSharedStateReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Debounce cloud saves to avoid one write for every keystroke in an editor.
+  useEffect(() => {
+    if (!sharedStateReady || !sharedStateAvailable) return;
+    const timeout = window.setTimeout(() => {
+      saveSharedManualState({ categories, companySettings, tools }).catch((error) => {
+        console.warn('[Supabase] Shared manual sync failed:', error);
+      });
+    }, 750);
+    return () => window.clearTimeout(timeout);
+  }, [categories, companySettings, sharedStateAvailable, sharedStateReady, tools]);
+
+  // Never keep a deleted/default ribbon category selected after local or cloud state loads.
+  useEffect(() => {
+    if (!categories.some((category) => category.id === activeRibbonCategory)) {
+      setActiveRibbonCategory(categories[0]?.id || '');
+    }
+  }, [activeRibbonCategory, categories]);
+
   // Handle URL hash on initial load
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
@@ -150,6 +199,7 @@ export default function App() {
   };
 
   const handleSelectTool = (tool: ToolItem) => {
+    setIsRibbonPaletteVisible(true);
     setSelectedTool(tool);
     setSelectedSubOption(null);
     window.location.hash = tool.id;
@@ -158,6 +208,7 @@ export default function App() {
 
   // USER REQUESTED: Sub-option navigation to its dedicated separate page
   const handleSelectSubOption = (tool: ToolItem, subOption: SubOptionItem) => {
+    setIsRibbonPaletteVisible(true);
     setSelectedTool(tool);
     setSelectedSubOption({ tool, subOption });
     window.location.hash = `${tool.id}__${subOption.id}`;
@@ -175,6 +226,7 @@ export default function App() {
   };
 
   const handleBackToList = () => {
+    setIsRibbonPaletteVisible(false);
     setSelectedSubOption(null);
     setSelectedTool(null);
     window.location.hash = '';
@@ -232,6 +284,13 @@ export default function App() {
 
   const handleSaveCategories = (updatedCategories: CategoryInfo[]) => {
     setCategories(updatedCategories);
+    setTools((currentTools) => keepToolsInCategories(currentTools, updatedCategories));
+    if (!updatedCategories.some((category) => category.id === activeRibbonCategory)) {
+      setActiveRibbonCategory(updatedCategories[0]?.id || '');
+    }
+    if (selectedTool && !updatedCategories.some((category) => category.id === selectedTool.categoryId)) {
+      handleBackToList();
+    }
   };
 
   const handleSaveCompanySettings = (updated: CompanySettings) => {
@@ -323,6 +382,7 @@ export default function App() {
         currentCategory={activeRibbonCategory}
         onSelectCategory={(catId) => {
           setActiveRibbonCategory(catId);
+          setIsRibbonPaletteVisible(true);
           if (selectedSubOption) setSelectedSubOption(null);
           if (selectedTool) setSelectedTool(null);
         }}
@@ -337,6 +397,7 @@ export default function App() {
           }
         }}
         onNavigateHome={handleBackToList}
+        isPaletteVisible={isRibbonPaletteVisible}
         lang={lang}
       />
 
@@ -347,6 +408,7 @@ export default function App() {
           <SubOptionDetailPage
             tool={selectedSubOption.tool}
             subOption={selectedSubOption.subOption}
+            categories={categories}
             companySettings={companySettings}
             lang={lang}
             onBackToParent={handleBackToParentTool}
@@ -361,6 +423,7 @@ export default function App() {
           /* DEDICATED TOOL PAGE VIEW */
           <ToolDetailPage
             tool={selectedTool}
+            categories={categories}
             allTools={tools}
             companySettings={companySettings}
             lang={lang}
@@ -381,6 +444,7 @@ export default function App() {
             activeCategory={activeRibbonCategory}
             onSelectCategory={(catId) => {
               setActiveRibbonCategory(catId);
+              setIsRibbonPaletteVisible(true);
             }}
             onSelectTool={handleSelectTool}
             onSelectSubOption={handleSelectSubOption}
@@ -423,6 +487,8 @@ export default function App() {
           isOpen={isEditorOpen}
           onClose={() => setIsEditorOpen(false)}
           tool={editingTool}
+          categories={categories}
+          defaultCategoryId={activeRibbonCategory}
           onSave={handleSaveTool}
           lang={lang}
         />

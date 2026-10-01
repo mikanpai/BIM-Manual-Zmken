@@ -14,6 +14,7 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   url: (import.meta.env.VITE_SUPABASE_URL as string) || '',
   anonKey: (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '',
   tableName: 'gloobe_media',
+  storageBucket: (import.meta.env.VITE_SUPABASE_STORAGE_BUCKET as string) || 'gloobe-assets',
   autoSync: true,
   isConnected: false,
 };
@@ -55,9 +56,12 @@ CREATE INDEX IF NOT EXISTS idx_gloobe_preview_sort ON public.gloobe_preview_tool
 -- Row Level Security (RLS) for gloobe_preview_tools
 ALTER TABLE public.gloobe_preview_tools ENABLE ROW LEVEL SECURITY;
 
+-- Drop first so this full schema can be safely re-run in the SQL Editor.
+DROP POLICY IF EXISTS "Allow public read access on preview tools" ON public.gloobe_preview_tools;
 CREATE POLICY "Allow public read access on preview tools" 
 ON public.gloobe_preview_tools FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow public insert/update on preview tools" ON public.gloobe_preview_tools;
 CREATE POLICY "Allow public insert/update on preview tools" 
 ON public.gloobe_preview_tools FOR ALL USING (true) WITH CHECK (true);
 
@@ -107,11 +111,47 @@ CREATE INDEX IF NOT EXISTS idx_gloobe_media_sort ON public.gloobe_media(sort_ord
 
 ALTER TABLE public.gloobe_media ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow public read access on gloobe_media" ON public.gloobe_media;
 CREATE POLICY "Allow public read access on gloobe_media" 
 ON public.gloobe_media FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow public insert/update on gloobe_media" ON public.gloobe_media;
 CREATE POLICY "Allow public insert/update on gloobe_media" 
 ON public.gloobe_media FOR ALL USING (true) WITH CHECK (true);
+
+-- -------------------------------------------------------------------------
+-- 3. Shared manual state. This stores the tool configuration (including the
+--    Storage URLs created by the browser) so changes are visible on every
+--    device. The app uses the single row with id = 'default'.
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.gloobe_manual_state (
+    id TEXT PRIMARY KEY,
+    payload JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.gloobe_manual_state ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read access on manual state" ON public.gloobe_manual_state;
+CREATE POLICY "Allow public read access on manual state"
+ON public.gloobe_manual_state FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow public write access on manual state" ON public.gloobe_manual_state;
+CREATE POLICY "Allow public write access on manual state"
+ON public.gloobe_manual_state FOR ALL USING (true) WITH CHECK (true);
+
+-- -------------------------------------------------------------------------
+-- 4. Storage setup. Run this in the SQL Editor once, then keep the bucket
+--    public so the URLs returned by getPublicUrl work for every visitor.
+-- -------------------------------------------------------------------------
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('gloobe-assets', 'gloobe-assets', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public read access for GLOOBE assets" ON storage.objects;
+CREATE POLICY "Public read access for GLOOBE assets"
+ON storage.objects FOR SELECT USING (bucket_id = 'gloobe-assets');
+DROP POLICY IF EXISTS "Public uploads for GLOOBE assets" ON storage.objects;
+CREATE POLICY "Public uploads for GLOOBE assets"
+ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'gloobe-assets');
 
 -- -------------------------------------------------------------------------
 -- 3. Sample Seed Data: Preview Tool with 3 GIFs / WebMs Demonstrations
@@ -276,9 +316,73 @@ export function getSupabaseConfig(): SupabaseConfig {
     url,
     anonKey,
     tableName: 'gloobe_media',
+    storageBucket: (import.meta.env.VITE_SUPABASE_STORAGE_BUCKET as string) || 'gloobe-assets',
     autoSync: true,
     isConnected: Boolean(url && anonKey),
   };
+}
+
+/** Read a file locally only when cloud storage has not been configured. */
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('The selected file could not be read.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Uploads a selected media file to Supabase Storage when configured. The
+ * resulting public URL, not a browser-only data URL, is stored in the manual.
+ */
+export async function uploadMediaFile(file: File, folder = 'manual'): Promise<string> {
+  const config = getSupabaseConfig();
+  const client = getSupabaseClient(config);
+  if (!client) return readFileAsDataUrl(file);
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-');
+  const objectPath = `${folder}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
+  const { error } = await client.storage
+    .from(config.storageBucket)
+    .upload(objectPath, file, { contentType: file.type || undefined, upsert: false });
+
+  if (error) {
+    throw new Error(`Supabase Storage upload failed: ${error.message}`);
+  }
+
+  const { data } = client.storage.from(config.storageBucket).getPublicUrl(objectPath);
+  return data.publicUrl;
+}
+
+export interface SharedManualState {
+  categories: unknown[];
+  companySettings: unknown;
+  tools: unknown[];
+}
+
+export async function loadSharedManualState(): Promise<{ state?: SharedManualState; available: boolean }> {
+  const client = getSupabaseClient();
+  if (!client) return { available: false };
+  const { data, error } = await client
+    .from('gloobe_manual_state')
+    .select('payload')
+    .eq('id', 'default')
+    .maybeSingle();
+  if (error) {
+    console.warn('[Supabase] Could not load shared manual state:', error.message);
+    return { available: false };
+  }
+  return { state: data?.payload as SharedManualState | undefined, available: true };
+}
+
+export async function saveSharedManualState(state: SharedManualState): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+  const { error } = await client
+    .from('gloobe_manual_state')
+    .upsert({ id: 'default', payload: state, updated_at: new Date().toISOString() });
+  if (error) throw new Error(`Supabase manual sync failed: ${error.message}`);
 }
 
 // Dummy helper for backwards compatibility
