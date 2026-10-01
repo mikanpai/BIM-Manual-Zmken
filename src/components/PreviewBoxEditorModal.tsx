@@ -5,6 +5,7 @@ import {
   Video, ArrowUp, ArrowDown, MoveUp, MoveDown 
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
+import { uploadMediaFile } from '../lib/supabase';
 
 interface PreviewBoxEditorModalProps {
   isOpen: boolean;
@@ -126,14 +127,10 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
   if (!isOpen) return null;
 
   // Handle logo image upload
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setLogoIconUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setLogoIconUrl(await uploadMediaFile(file, 'preview-icons')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Add new media item (GIF or WebM video)
@@ -156,7 +153,7 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
   };
 
   // Handle media file upload
-  const handleMediaFileUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaFileUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const isVideoFile = file.type.includes('webm') || file.type.includes('mp4') || file.name.toLowerCase().endsWith('.webm') || file.name.toLowerCase().endsWith('.mp4');
@@ -169,17 +166,15 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
     else if (isGifFile) detectedType = 'gif';
     else detectedType = 'image';
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
+    try {
       const updated = [...mediaList];
       updated[index] = {
         ...updated[index],
-        url: event.target?.result as string,
+        url: await uploadMediaFile(file, 'preview-media'),
         type: detectedType,
       };
       setMediaList(updated);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   const handleUpdateMedia = (index: number, updates: Partial<PreviewMediaItem>) => {
@@ -212,6 +207,27 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
     if (field === 'instructionEn') s.instruction = { ...s.instruction, en: value };
     updated[index] = s;
     setSteps(updated);
+  };
+
+  const handleStepMediaChange = (index: number, mediaId: string) => {
+    const updated = [...steps];
+    updated[index] = { ...updated[index], mediaId: mediaId || undefined };
+    setSteps(updated);
+  };
+
+  const addStep = () => {
+    const nextNumber = steps.length + 1;
+    setSteps([...steps, {
+      id: `step-${Date.now()}-${nextNumber}`,
+      stepNumber: nextNumber,
+      title: { ja: `ステップ ${nextNumber}`, en: `Step ${nextNumber}` },
+      instruction: { ja: '', en: '' },
+      mediaId: mediaList[nextNumber - 1]?.id,
+    }]);
+  };
+
+  const removeStep = (index: number) => {
+    setSteps(steps.filter((_, stepIndex) => stepIndex !== index).map((step, stepIndex) => ({ ...step, stepNumber: stepIndex + 1 })));
   };
 
   const handleSave = () => {
@@ -680,9 +696,10 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
           <div className="space-y-3">
             <div className="font-bold text-stone-900 text-xs flex items-center justify-between">
               <span>{lang === 'ja' ? '手動矢印バーステップ (1, 2, 3, 4)' : 'Manual Step Scrubber Steps (1, 2, 3, 4)'}</span>
-              <span className="text-[10px] text-stone-400 font-normal">
-                {lang === 'ja' ? '矢印ボタンで切り替わる手順内容' : 'Steps shown on manual arrow scrubber'}
-              </span>
+              <button type="button" onClick={addStep} className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-bold text-orange-700 hover:bg-orange-100">
+                <Plus className="w-3 h-3" />
+                {lang === 'ja' ? 'ステップ追加' : 'Add Step'}
+              </button>
             </div>
 
             <div className="space-y-2.5">
@@ -709,7 +726,20 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
                         className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white font-medium"
                       />
                     </div>
+                    <button type="button" onClick={() => removeStep(idx)} className="rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600" title={lang === 'ja' ? 'ステップを削除' : 'Remove step'}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+
+                  <label className="block text-[10px] font-semibold text-stone-600">
+                    {lang === 'ja' ? 'このステップで表示するGIF / WebM / 画像' : 'GIF / WebM / image to show for this step'}
+                    <select value={step.mediaId || ''} onChange={(event) => handleStepMediaChange(idx, event.target.value)} className="mt-1 w-full rounded border border-stone-300 bg-white px-2.5 py-1.5 text-xs">
+                      <option value="">{lang === 'ja' ? 'メディアを選択しない' : 'No linked media'}</option>
+                      {mediaList.filter((media) => media.url.trim()).map((media, mediaIndex) => (
+                        <option key={media.id} value={media.id}>{media.title ? (lang === 'ja' ? media.title.ja : media.title.en) : `Media ${mediaIndex + 1}`}</option>
+                      ))}
+                    </select>
+                  </label>
 
                   {/* Step Instructions / Descriptions (JA & EN) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
