@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { CompanySettings, Language, PreviewBoxItem, StepItem, SubOptionItem, ToolItem } from '../types/manual';
-import { CATEGORIES } from '../data/defaultManual';
+import { CategoryInfo, CompanySettings, Language, PreviewBoxItem, StepItem, SubOptionItem, ToolItem } from '../types/manual';
 import { CadIcon } from './CadIcon';
 import { InteractiveCadCanvas } from './InteractiveCadCanvas';
 import { 
@@ -14,6 +13,7 @@ import { SupabaseMediaGallery } from './SupabaseMediaGallery';
 
 interface ToolDetailPageProps {
   tool: ToolItem;
+  categories: CategoryInfo[];
   allTools: ToolItem[];
   companySettings: CompanySettings;
   lang: Language;
@@ -27,6 +27,7 @@ interface ToolDetailPageProps {
 
 export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
   tool,
+  categories,
   allTools,
   companySettings,
   lang,
@@ -66,7 +67,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
     ? tool.previewBoxes
     : [defaultPreviewBox];
 
-  const category = CATEGORIES.find((c) => c.id === tool.categoryId) || CATEGORIES[0];
+  const category = categories.find((c) => c.id === tool.categoryId);
 
   // Navigation between tools
   const currentIndex = allTools.findIndex((t) => t.id === tool.id);
@@ -110,7 +111,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
           <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
           
           <span className="text-stone-600">
-            {lang === 'ja' ? category.name.ja : category.name.en}
+            {category ? (lang === 'ja' ? category.name.ja : category.name.en) : tool.categoryId}
           </span>
 
           <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
@@ -161,7 +162,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-xs font-semibold">
-                  {lang === 'ja' ? category.name.ja : category.name.en} • {lang === 'ja' ? tool.subgroup.ja : tool.subgroup.en}
+                  {category ? (lang === 'ja' ? category.name.ja : category.name.en) : tool.categoryId} • {lang === 'ja' ? tool.subgroup.ja : tool.subgroup.en}
                 </span>
               </div>
 

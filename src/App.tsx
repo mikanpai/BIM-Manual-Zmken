@@ -84,7 +84,8 @@ export default function App() {
   });
 
   // 5. UI / Navigation state
-  const [activeRibbonCategory, setActiveRibbonCategory] = useState<RibbonCategoryId>('architecture');
+  const [activeRibbonCategory, setActiveRibbonCategory] = useState<RibbonCategoryId>(() => categories[0]?.id || '');
+  const [isRibbonPaletteVisible, setIsRibbonPaletteVisible] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolItem | null>(null);
   
   // USER REQUESTED: Dedicated separate page for sub-options
@@ -160,6 +161,13 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [categories, companySettings, sharedStateAvailable, sharedStateReady, tools]);
 
+  // Never keep a deleted/default ribbon category selected after local or cloud state loads.
+  useEffect(() => {
+    if (!categories.some((category) => category.id === activeRibbonCategory)) {
+      setActiveRibbonCategory(categories[0]?.id || '');
+    }
+  }, [activeRibbonCategory, categories]);
+
   // Handle URL hash on initial load
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
@@ -191,6 +199,7 @@ export default function App() {
   };
 
   const handleSelectTool = (tool: ToolItem) => {
+    setIsRibbonPaletteVisible(true);
     setSelectedTool(tool);
     setSelectedSubOption(null);
     window.location.hash = tool.id;
@@ -199,6 +208,7 @@ export default function App() {
 
   // USER REQUESTED: Sub-option navigation to its dedicated separate page
   const handleSelectSubOption = (tool: ToolItem, subOption: SubOptionItem) => {
+    setIsRibbonPaletteVisible(true);
     setSelectedTool(tool);
     setSelectedSubOption({ tool, subOption });
     window.location.hash = `${tool.id}__${subOption.id}`;
@@ -216,6 +226,7 @@ export default function App() {
   };
 
   const handleBackToList = () => {
+    setIsRibbonPaletteVisible(false);
     setSelectedSubOption(null);
     setSelectedTool(null);
     window.location.hash = '';
@@ -371,6 +382,7 @@ export default function App() {
         currentCategory={activeRibbonCategory}
         onSelectCategory={(catId) => {
           setActiveRibbonCategory(catId);
+          setIsRibbonPaletteVisible(true);
           if (selectedSubOption) setSelectedSubOption(null);
           if (selectedTool) setSelectedTool(null);
         }}
@@ -385,6 +397,7 @@ export default function App() {
           }
         }}
         onNavigateHome={handleBackToList}
+        isPaletteVisible={isRibbonPaletteVisible}
         lang={lang}
       />
 
@@ -395,6 +408,7 @@ export default function App() {
           <SubOptionDetailPage
             tool={selectedSubOption.tool}
             subOption={selectedSubOption.subOption}
+            categories={categories}
             companySettings={companySettings}
             lang={lang}
             onBackToParent={handleBackToParentTool}
@@ -409,6 +423,7 @@ export default function App() {
           /* DEDICATED TOOL PAGE VIEW */
           <ToolDetailPage
             tool={selectedTool}
+            categories={categories}
             allTools={tools}
             companySettings={companySettings}
             lang={lang}
@@ -429,6 +444,7 @@ export default function App() {
             activeCategory={activeRibbonCategory}
             onSelectCategory={(catId) => {
               setActiveRibbonCategory(catId);
+              setIsRibbonPaletteVisible(true);
             }}
             onSelectTool={handleSelectTool}
             onSelectSubOption={handleSelectSubOption}

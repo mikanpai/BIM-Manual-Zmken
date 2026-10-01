@@ -17,6 +17,7 @@ interface RibbonBarProps {
   onAddNewTool: () => void;
   onSaveTools?: (updatedTools: ToolItem[]) => void;
   onNavigateHome: () => void;
+  isPaletteVisible?: boolean;
   lang: Language;
 }
 
@@ -30,6 +31,7 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
   onAddNewTool,
   onSaveTools,
   onNavigateHome,
+  isPaletteVisible = true,
   lang,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -211,7 +213,7 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
       </div>
 
       {/* Ribbon Tool Palette Panel */}
-      {!isCollapsed && (
+      {!isCollapsed && isPaletteVisible && (
         <div className="px-3 md:px-6 py-2.5 bg-white min-h-[96px] flex items-stretch gap-4 overflow-x-auto scrollbar-thin">
           {Object.keys(groupedSubgroups).length > 0 ? (
             Object.entries(groupedSubgroups).map(([groupKey, groupData]) => {
