@@ -29,6 +29,7 @@ export interface StepItem {
     en: string;
   };
   mediaUrl?: string; // Image or GIF URL / Base64
+  mediaId?: string; // Optional PreviewMediaItem id shown when this step is selected
   mediaCaption?: {
     ja: string;
     en: string;
