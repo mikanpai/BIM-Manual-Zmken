@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Language, PreviewMediaItem, StepItem } from '../types/manual';
 import { 
   Play, Pause, ChevronLeft, ChevronRight, Film, Edit3, Trash2, Eye,
-  Video, Image as ImageIcon, Sparkles, Layers
+  Video, Image as ImageIcon, Sparkles, Layers, Maximize2, Minimize2
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
 
@@ -40,6 +40,7 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
   const totalSteps = steps.length > 0 ? steps.length : 4;
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMediaExpanded, setIsMediaExpanded] = useState(false);
 
   // Consolidate media files list (supports 2, 3, or more GIFs/WebMs)
   const consolidatedMedia: PreviewMediaItem[] = React.useMemo(() => {
@@ -78,6 +79,19 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
       setActiveMediaIndex(0);
     }
   }, [consolidatedMedia.length, activeMediaIndex]);
+
+  // Link a clicked step to its chosen GIF/WebM. Older steps without a media
+  // id continue to work by URL or matching the media item in the same position.
+  useEffect(() => {
+    const step = steps[currentStepIndex];
+    if (!step || consolidatedMedia.length === 0) return;
+    const mediaIndex = step.mediaId
+      ? consolidatedMedia.findIndex((media) => media.id === step.mediaId)
+      : step.mediaUrl
+        ? consolidatedMedia.findIndex((media) => media.url === step.mediaUrl)
+        : currentStepIndex < consolidatedMedia.length ? currentStepIndex : -1;
+    if (mediaIndex >= 0) setActiveMediaIndex(mediaIndex);
+  }, [consolidatedMedia, currentStepIndex, steps]);
 
   // Auto-play timer when play is active
   useEffect(() => {
@@ -446,6 +460,16 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
               )}
             </div>
 
+            <button
+              type="button"
+              onClick={() => setIsMediaExpanded(true)}
+              className="absolute top-2.5 right-2.5 inline-flex items-center gap-1.5 rounded-lg bg-black/65 hover:bg-orange-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-md transition"
+              title={lang === 'ja' ? 'メディアを拡大' : 'Enlarge media'}
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>{lang === 'ja' ? '拡大' : 'Enlarge'}</span>
+            </button>
+
             {/* Floating Left/Right Arrows on hover when multiple media */}
             {consolidatedMedia.length > 1 && (
               <>
@@ -484,6 +508,27 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
           renderFallbackPreview()
         )}
       </div>
+
+      {isMediaExpanded && activeMediaUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs" onClick={() => setIsMediaExpanded(false)}>
+          <div className="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-stone-950 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-4 border-b border-white/15 px-4 py-3 text-white">
+              <span className="truncate text-sm font-bold">{currentMedia?.title ? (lang === 'ja' ? currentMedia.title.ja : currentMedia.title.en) : displayTitle}</span>
+              <button type="button" onClick={() => setIsMediaExpanded(false)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-bold hover:bg-orange-600 transition" title={lang === 'ja' ? '通常サイズに戻す' : 'Minimize media'}>
+                <Minimize2 className="w-4 h-4" />
+                <span>{lang === 'ja' ? '縮小' : 'Minimize'}</span>
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center p-3 sm:p-6">
+              {isVideo ? (
+                <video src={activeMediaUrl} autoPlay loop controls playsInline className="max-h-full max-w-full rounded-lg object-contain" />
+              ) : (
+                <img src={activeMediaUrl} alt={displayTitle} className="max-h-full max-w-full rounded-lg object-contain" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* USER REQUESTED: Arrow Bar to move 1, 2, 3, 4 manually */}
       <div className="pt-2 border-t border-orange-100 space-y-2.5">

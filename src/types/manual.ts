@@ -29,6 +29,7 @@ export interface StepItem {
     en: string;
   };
   mediaUrl?: string; // Image or GIF URL / Base64
+  mediaId?: string; // Optional PreviewMediaItem id shown when this step is selected
   mediaCaption?: {
     ja: string;
     en: string;
@@ -160,6 +161,7 @@ export interface SupabaseConfig {
   url: string;
   anonKey: string;
   tableName: string;
+  storageBucket: string;
   autoSync: boolean;
   isConnected?: boolean;
   lastSyncAt?: string;
