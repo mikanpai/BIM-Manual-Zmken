@@ -799,8 +799,9 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                 />
               </div>
 
-              {/* Short Description */}
-              <div>
+              {/* Short Descriptions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                 <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
                   {lang === 'ja' ? '概要・簡潔な説明（日本語）' : 'Short Description (Japanese)'} <span className="text-red-500">*</span>
                 </label>
@@ -812,10 +813,25 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                   placeholder="一覧で表示される1行の機能サマリー"
                   className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
                 />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
+                    {lang === 'ja' ? '概要・簡潔な説明（英語）' : 'Short Description (English)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={shortDescEn}
+                    onChange={(e) => setShortDescEn(e.target.value)}
+                    placeholder="One-line summary shown in the tool list"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
+                  />
+                </div>
               </div>
 
-              {/* Full Description */}
-              <div>
+              {/* Full Descriptions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                 <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
                   {lang === 'ja' ? '詳細な機能説明（日本語）' : 'Detailed Function Description (Japanese)'}
                 </label>
@@ -826,6 +842,20 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                   placeholder="このツールがGLOOBE上でどのような役割を果たし、どのようなBIMデータと連動するかを記入します"
                   className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none leading-relaxed"
                 />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
+                    {lang === 'ja' ? '詳細な機能説明（英語）' : 'Detailed Function Description (English)'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={fullDescEn}
+                    onChange={(e) => setFullDescEn(e.target.value)}
+                    placeholder="Explain this tool's role in GLOOBE and the BIM data it works with."
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none leading-relaxed"
+                  />
+                </div>
               </div>
 
             </div>
