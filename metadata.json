@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix GLOOBE BIM Manual \u0026 Tool Guide",
+  "description": "Interactive GLOOBE BIM operation manual and tool guide with dual Japanese-English support, ribbon simulator, and custom tool documentation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
