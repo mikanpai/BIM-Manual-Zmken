@@ -233,11 +233,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
     const cat = localCategories[index];
     const confirmMsg = lang === 'ja'
-      ? `カテゴリ「${cat.name.ja}」を削除しますか？`
-      : `Delete category "${cat.name.en}"?`;
+      ? `カテゴリ「${cat.name.ja}」と、このカテゴリ内の${localTools.filter((tool) => tool.categoryId === cat.id).length}件のツールを削除しますか？`
+      : `Delete category "${cat.name.en}" and its ${localTools.filter((tool) => tool.categoryId === cat.id).length} tool(s)?`;
     if (window.confirm(confirmMsg)) {
       const updated = localCategories.filter((_, i) => i !== index);
       setLocalCategories(updated);
+      // A deleted ribbon category must not leave orphan tools to reappear
+      // after saving/reloading the shared manual state.
+      setLocalTools((currentTools) => currentTools.filter((tool) => tool.categoryId !== cat.id));
       if (selectedCatId === cat.id) {
         setSelectedCatId(updated[0].id);
       }
