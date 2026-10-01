@@ -452,6 +452,8 @@ export default function App() {
           isOpen={isEditorOpen}
           onClose={() => setIsEditorOpen(false)}
           tool={editingTool}
+          categories={categories}
+          defaultCategoryId={activeRibbonCategory}
           onSave={handleSaveTool}
           lang={lang}
         />

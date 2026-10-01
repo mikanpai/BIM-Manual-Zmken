@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Language, RibbonCategoryId, ToolItem, StepItem, MediaItem, SubOptionItem, PreviewBoxItem } from '../types/manual';
-import { CATEGORIES } from '../data/defaultManual';
+import { CategoryInfo, Language, RibbonCategoryId, ToolItem, StepItem, MediaItem, SubOptionItem, PreviewBoxItem } from '../types/manual';
 import { 
   X, Check, Plus, Trash2, Upload, Image as ImageIcon, 
   HelpCircle, AlertTriangle, Layers, Film, ArrowUp, ArrowDown,
@@ -13,6 +12,8 @@ interface ToolEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   tool: ToolItem | null; // null if creating a new tool
+  categories: CategoryInfo[];
+  defaultCategoryId?: RibbonCategoryId;
   onSave: (savedTool: ToolItem) => void;
   lang: Language;
 }
@@ -21,13 +22,15 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   isOpen,
   onClose,
   tool,
+  categories,
+  defaultCategoryId,
   onSave,
   lang,
 }) => {
   const isEditing = !!tool;
 
   const [categoryId, setCategoryId] = useState<RibbonCategoryId>(
-    tool ? tool.categoryId : 'architecture'
+    tool ? tool.categoryId : (defaultCategoryId || categories[0]?.id || '')
   );
   const [subgroupJa, setSubgroupJa] = useState(tool ? tool.subgroup.ja : '意匠部材');
   const [subgroupEn, setSubgroupEn] = useState(tool ? tool.subgroup.en : 'Architectural Component');
@@ -213,7 +216,10 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
       setWarningsEn(warnEnList);
     } else {
       // New tool defaults
-      setCategoryId('architecture');
+      // Only categories currently configured for the ribbon can be assigned.
+      setCategoryId(defaultCategoryId && categories.some((category) => category.id === defaultCategoryId)
+        ? defaultCategoryId
+        : (categories[0]?.id || ''));
       setSubgroupJa('意匠部材');
       setSubgroupEn('Architectural Component');
       setNameJa('');
@@ -256,7 +262,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
     }
     setEditLang(lang === 'en' ? 'en' : 'ja');
     setActiveTab('basic');
-  }, [tool, isOpen, lang]);
+  }, [tool, isOpen, lang, categories, defaultCategoryId]);
 
   if (!isOpen) return null;
 
@@ -689,7 +695,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                     onChange={(e) => setCategoryId(e.target.value as RibbonCategoryId)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
                   >
-                    {CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {lang === 'ja' ? c.name.ja : c.name.en}
                       </option>
