@@ -7,6 +7,7 @@ import {
   ListTree, ChevronDown, CheckCircle2, Sparkles
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
+import { uploadMediaFile } from '../lib/supabase';
 
 interface ToolEditorModalProps {
   isOpen: boolean;
@@ -260,14 +261,10 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   if (!isOpen) return null;
 
   // Custom Icon File Upload Handler
-  const handleCustomIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setCustomIconUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setCustomIconUrl(await uploadMediaFile(file, 'icons')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Preview Box handlers
@@ -309,31 +306,19 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
     setPreviewBoxes(updated);
   };
 
-  const handleBoxLogoUpload = (index: number, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      updatePreviewBox(index, 'logoIconUrl', e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handleBoxLogoUpload = async (index: number, file: File) => {
+    try { updatePreviewBox(index, 'logoIconUrl', await uploadMediaFile(file, 'preview-icons')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
-  const handleBoxGifUpload = (index: number, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      updatePreviewBox(index, 'gifUrl', e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handleBoxGifUpload = async (index: number, file: File) => {
+    try { updatePreviewBox(index, 'gifUrl', await uploadMediaFile(file, 'preview-media')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Simulator GIF Upload Handler
-  const handleSimulatorGifUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSimulatorGifUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setSimulatorGifUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setSimulatorGifUrl(await uploadMediaFile(file, 'simulator-media')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Sub-option handlers
@@ -404,22 +389,20 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   };
 
   // Media handlers (Image/GIF upload & URL)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, targetStepIndex?: number) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetStepIndex?: number) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
     const isWebp = file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp');
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      const mediaUrl = await uploadMediaFile(file, 'tool-media');
       if (typeof targetStepIndex === 'number') {
-        updateStep(targetStepIndex, 'mediaUrl', dataUrl);
+        updateStep(targetStepIndex, 'mediaUrl', mediaUrl);
       } else {
         const newMedia: MediaItem = {
           id: `m-${Date.now()}`,
-          url: dataUrl,
+          url: mediaUrl,
           title: {
             ja: file.name.replace(/\.[^/.]+$/, ''),
             en: file.name.replace(/\.[^/.]+$/, '')
@@ -433,8 +416,9 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
         };
         setMediaList([...mediaList, newMedia]);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Upload failed.');
+    }
   };
 
   const addMediaUrl = () => {
