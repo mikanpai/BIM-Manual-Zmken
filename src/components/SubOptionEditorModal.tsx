@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Language, StepItem, SubOptionItem } from '../types/manual';
 import { X, Check, Upload, Trash2, Plus, Sparkles, Film, Image as ImageIcon } from 'lucide-react';
 import { CadIcon } from './CadIcon';
+import { uploadMediaFile } from '../lib/supabase';
 
 interface SubOptionEditorModalProps {
   isOpen: boolean;
@@ -111,25 +112,17 @@ export const SubOptionEditorModal: React.FC<SubOptionEditorModalProps> = ({
   if (!isOpen) return null;
 
   // Handle custom icon upload
-  const handleIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setCustomIconUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setCustomIconUrl(await uploadMediaFile(file, 'sub-option-icons')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   // Handle GIF/Image upload
-  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setMediaUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try { setMediaUrl(await uploadMediaFile(file, 'sub-option-media')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
   const handleStepChange = (index: number, field: 'titleJa' | 'titleEn' | 'instructionJa' | 'instructionEn', value: string) => {

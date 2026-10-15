@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { CompanySettings, Language, PreviewBoxItem, StepItem, SubOptionItem, ToolItem } from '../types/manual';
-import { CATEGORIES } from '../data/defaultManual';
+import { CategoryInfo, CompanySettings, Language, PreviewBoxItem, StepItem, SubOptionItem, ToolItem } from '../types/manual';
 import { CadIcon } from './CadIcon';
 import { InteractiveCadCanvas } from './InteractiveCadCanvas';
 import { 
   ArrowLeft, ArrowRight, ChevronRight, Edit3, Printer, Share2, 
   CheckCircle2, Circle, HelpCircle, AlertTriangle, Film, 
-  Image as ImageIcon, Keyboard, MousePointer, BookOpen, Sparkles,
+  Image as ImageIcon, MousePointer, BookOpen, Sparkles,
   ExternalLink, Plus, Check, Layers
 } from 'lucide-react';
 import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
@@ -14,6 +13,7 @@ import { SupabaseMediaGallery } from './SupabaseMediaGallery';
 
 interface ToolDetailPageProps {
   tool: ToolItem;
+  categories: CategoryInfo[];
   allTools: ToolItem[];
   companySettings: CompanySettings;
   lang: Language;
@@ -27,6 +27,7 @@ interface ToolDetailPageProps {
 
 export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
   tool,
+  categories,
   allTools,
   companySettings,
   lang,
@@ -66,7 +67,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
     ? tool.previewBoxes
     : [defaultPreviewBox];
 
-  const category = CATEGORIES.find((c) => c.id === tool.categoryId) || CATEGORIES[0];
+  const category = categories.find((c) => c.id === tool.categoryId);
 
   // Navigation between tools
   const currentIndex = allTools.findIndex((t) => t.id === tool.id);
@@ -110,7 +111,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
           <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
           
           <span className="text-stone-600">
-            {lang === 'ja' ? category.name.ja : category.name.en}
+            {category ? (lang === 'ja' ? category.name.ja : category.name.en) : tool.categoryId}
           </span>
 
           <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
@@ -161,7 +162,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-xs font-semibold">
-                  {lang === 'ja' ? category.name.ja : category.name.en} • {lang === 'ja' ? tool.subgroup.ja : tool.subgroup.en}
+                  {category ? (lang === 'ja' ? category.name.ja : category.name.en) : tool.categoryId} • {lang === 'ja' ? tool.subgroup.ja : tool.subgroup.en}
                 </span>
               </div>
 
@@ -224,10 +225,10 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
       </div>
 
       {/* Main Grid: Left Detailed Content, Right Utilities */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-6">
         
         {/* Left Column (2 Cols wide on desktop) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           
           {/* Section 1: Overview (機能概要) */}
           <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-3">
@@ -522,49 +523,8 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
 
         </div>
 
-        {/* Right Column: CAD Utilities & Quick Ref (1 Col wide) */}
+        {/* Related tools remain available below the full-width manual content. */}
         <div className="space-y-6">
-          
-          {/* Box 1: Keyboard & Mouse Quick Reference */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-stone-100">
-              <Keyboard className="w-4 h-4 text-orange-600" />
-              <h3 className="text-sm font-bold text-stone-900">
-                {lang === 'ja' ? '操作キー & マウス' : 'Shortcuts & Controls'}
-              </h3>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-100">
-                <span className="text-stone-600">{lang === 'ja' ? 'ショートカット' : 'Shortcut'}</span>
-                <span className="font-mono font-bold text-orange-600 bg-orange-100/70 px-2 py-0.5 rounded text-xs">
-                  {tool.shortcut || (lang === 'ja' ? '未割当' : 'None')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-100">
-                <span className="text-stone-600">{lang === 'ja' ? '直交拘束 (水平/垂直)' : 'Ortho Lock'}</span>
-                <span className="font-mono text-stone-700 bg-white border border-stone-200 px-1.5 py-0.5 rounded text-[11px]">
-                  {lang === 'ja' ? 'Shift キー' : 'Shift Key'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-100">
-                <span className="text-stone-600">{lang === 'ja' ? 'オフセット芯反転' : 'Flip Baseline'}</span>
-                <span className="font-mono text-stone-700 bg-white border border-stone-200 px-1.5 py-0.5 rounded text-[11px]">
-                  {lang === 'ja' ? 'Space キー' : 'Space Key'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-100">
-                <span className="text-stone-600">{lang === 'ja' ? 'キャンセル / 選択解除' : 'Cancel / Deselect'}</span>
-                <span className="font-mono text-stone-700 bg-white border border-stone-200 px-1.5 py-0.5 rounded text-[11px]">
-                  {lang === 'ja' ? 'Esc キー' : 'Esc Key'}
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* Box 2: Related Tools */}
           {relatedTools.length > 0 && (
             <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs space-y-3">
@@ -601,25 +561,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
               </div>
             </div>
           )}
-
-          {/* Box 3: Internal Trainee Practice Status */}
-          <div className="bg-gradient-to-br from-orange-50 via-white to-amber-50/70 text-stone-800 rounded-2xl p-5 shadow-xs border border-orange-200/90 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-orange-700">
-              {lang === 'ja' ? '新人・オペレータ練習チェック' : 'Trainee Practice Check'}
-            </h3>
-            <p className="text-xs text-stone-600 leading-relaxed font-normal">
-              {lang === 'ja' 
-                ? 'GLOOBE上で実際にこのコマンドをテストし、手順通りの作図結果が得られたらチェックマークを入れて完了記録とします。'
-                : 'Test this command in GLOOBE and check off the steps as you verify the expected CAD behavior.'}
-            </p>
-            <div className="pt-2 border-t border-orange-100 flex items-center justify-between text-xs">
-              <span className="text-stone-500">{lang === 'ja' ? '進捗:' : 'Progress:'}</span>
-              <span className="font-bold text-orange-600">
-                {Object.values(completedSteps).filter(Boolean).length} / {tool.steps.length} {lang === 'ja' ? '完了' : 'Done'}
-              </span>
-            </div>
-          </div>
-
         </div>
 
       </div>
