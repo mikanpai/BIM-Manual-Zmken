@@ -13,6 +13,7 @@ interface ToolEditorModalProps {
   onClose: () => void;
   tool: ToolItem | null; // null if creating a new tool
   categories: CategoryInfo[];
+  allTools?: ToolItem[]; // used to list the existing groupings of a category
   defaultCategoryId?: RibbonCategoryId;
   onSave: (savedTool: ToolItem) => void;
   lang: Language;
@@ -23,6 +24,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   onClose,
   tool,
   categories,
+  allTools = [],
   defaultCategoryId,
   onSave,
   lang,
@@ -34,6 +36,16 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   );
   const [subgroupJa, setSubgroupJa] = useState(tool ? tool.subgroup.ja : '意匠部材');
   const [subgroupEn, setSubgroupEn] = useState(tool ? tool.subgroup.en : 'Architectural Component');
+  // 'existing' = pick one of the category's current groupings, 'new' = type a new grouping name
+  const [groupMode, setGroupMode] = useState<'existing' | 'new'>('existing');
+
+  // Existing groupings (in ribbon order) of the currently selected category
+  const existingGroups: { ja: string; en: string }[] = [];
+  allTools.forEach((t) => {
+    if (t.categoryId === categoryId && t.subgroup?.ja && !existingGroups.some((g) => g.ja === t.subgroup.ja)) {
+      existingGroups.push({ ja: t.subgroup.ja, en: t.subgroup.en || t.subgroup.ja });
+    }
+  });
   const [nameJa, setNameJa] = useState(tool ? tool.name.ja : '');
   const [nameEn, setNameEn] = useState(tool ? tool.name.en : '');
   const [shortcut, setShortcut] = useState(tool?.shortcut || '');
@@ -263,6 +275,30 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
     setEditLang(lang === 'en' ? 'en' : 'ja');
     setActiveTab('basic');
   }, [tool, isOpen, lang, categories, defaultCategoryId]);
+
+  // Keep the grouping choice valid whenever the editor opens or the category changes:
+  // - editing a tool in its own category -> keep its current group
+  // - otherwise -> preselect the category's first existing group, or switch to "new group" if it has none
+  useEffect(() => {
+    if (!isOpen) return;
+    if (tool && categoryId === tool.categoryId) {
+      const exists = existingGroups.some((g) => g.ja === tool.subgroup?.ja);
+      setSubgroupJa(tool.subgroup?.ja || '');
+      setSubgroupEn(tool.subgroup?.en || tool.subgroup?.ja || '');
+      setGroupMode(exists || existingGroups.length === 0 ? 'existing' : 'new');
+      return;
+    }
+    if (existingGroups.length > 0) {
+      setSubgroupJa(existingGroups[0].ja);
+      setSubgroupEn(existingGroups[0].en);
+      setGroupMode('existing');
+    } else {
+      setSubgroupJa('');
+      setSubgroupEn('');
+      setGroupMode('new');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, categoryId, tool?.id]);
 
   if (!isOpen) return null;
 
@@ -710,47 +746,60 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                     </label>
                   </div>
                   <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      value={subgroupJa}
-                      onChange={(e) => setSubgroupJa(e.target.value)}
-                      placeholder={lang === 'ja' ? '例: 柱ツール、スラブツール、梁ツール' : 'Group Name (Japanese)'}
-                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none"
-                    />
-                    <input
-                      type="text"
-                      value={subgroupEn}
-                      onChange={(e) => setSubgroupEn(e.target.value)}
-                      placeholder="e.g. Column Tools, Slab Tools, Beam Tools"
-                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none"
-                    />
-                    {/* Quick Group Presets */}
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {[
-                        { ja: '柱ツール', en: 'Column Tools' },
-                        { ja: '梁・大梁ツール', en: 'Beam Tools' },
-                        { ja: 'スラブツール', en: 'Slab Tools' },
-                        { ja: '壁ツール', en: 'Wall Tools' },
-                        { ja: '仕上ツール', en: 'Finish Tools' },
-                        { ja: '階段ツール', en: 'Stair Tools' },
-                      ].map((grp) => (
-                        <button
-                          key={grp.ja}
-                          type="button"
-                          onClick={() => {
-                            setSubgroupJa(grp.ja);
-                            setSubgroupEn(grp.en);
-                          }}
-                          className={`px-2 py-0.5 rounded text-[10px] border transition font-medium ${
-                            subgroupJa === grp.ja
-                              ? 'bg-orange-600 text-white border-orange-600'
-                              : 'bg-stone-100 hover:bg-orange-50 text-stone-600 border-stone-200'
-                          }`}
-                        >
-                          {lang === 'ja' ? grp.ja : grp.en}
-                        </button>
+                    {/* Choose an existing group, or create a new one */}
+                    <select
+                      value={groupMode === 'new' ? '__new__' : subgroupJa}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '__new__') {
+                          setGroupMode('new');
+                          setSubgroupJa('');
+                          setSubgroupEn('');
+                        } else {
+                          const g = existingGroups.find((x) => x.ja === v);
+                          setGroupMode('existing');
+                          setSubgroupJa(v);
+                          setSubgroupEn(g ? g.en : v);
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
+                    >
+                      {existingGroups.map((g) => (
+                        <option key={g.ja} value={g.ja}>
+                          {lang === 'ja' ? g.ja : g.en}
+                        </option>
                       ))}
-                    </div>
+                      {groupMode === 'existing' && subgroupJa && !existingGroups.some((g) => g.ja === subgroupJa) && (
+                        <option value={subgroupJa}>{subgroupJa}</option>
+                      )}
+                      <option value="__new__">
+                        {lang === 'ja' ? '＋ 新しいグループを作成…' : '+ Create new group…'}
+                      </option>
+                    </select>
+
+                    {groupMode === 'new' && (
+                      <div className="space-y-1.5 p-2.5 rounded-lg border border-orange-200 bg-orange-50/50">
+                        <input
+                          type="text"
+                          value={subgroupJa}
+                          onChange={(e) => setSubgroupJa(e.target.value)}
+                          placeholder={lang === 'ja' ? '新しいグループ名（日本語）例: ゾーン' : 'New group name (Japanese)'}
+                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none bg-white"
+                        />
+                        <input
+                          type="text"
+                          value={subgroupEn}
+                          onChange={(e) => setSubgroupEn(e.target.value)}
+                          placeholder="New group name (English), e.g. Zone"
+                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none bg-white"
+                        />
+                        <p className="text-[10px] text-orange-800">
+                          {lang === 'ja'
+                            ? 'このツールを保存すると新しいグループがリボンに追加されます。順番は管理者パネルで変更できます。'
+                            : 'Saving this tool adds the new group to the ribbon. You can reorder it in the Admin Panel.'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
