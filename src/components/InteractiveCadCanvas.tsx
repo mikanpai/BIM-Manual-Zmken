@@ -119,16 +119,6 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
   };
 
   // Media navigation
-  const handlePrevMedia = () => {
-    if (consolidatedMedia.length <= 1) return;
-    setActiveMediaIndex((prev) => (prev > 0 ? prev - 1 : consolidatedMedia.length - 1));
-  };
-
-  const handleNextMedia = () => {
-    if (consolidatedMedia.length <= 1) return;
-    setActiveMediaIndex((prev) => (prev < consolidatedMedia.length - 1 ? prev + 1 : 0));
-  };
-
   // Current active step information
   const activeStep = steps[currentStepIndex];
 
@@ -360,59 +350,6 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
         </div>
       </div>
 
-      {/* Multiple Media Tabs / Pills Selector (for 2, 3, or more GIFs / WebM videos) */}
-      {consolidatedMedia.length > 1 && (
-        <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-orange-50/80 border border-orange-200">
-          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
-            <span className="text-[10px] font-bold text-orange-900 px-1 shrink-0 flex items-center gap-1">
-              <Film className="w-3 h-3 text-orange-600" />
-              <span>{lang === 'ja' ? 'メディア切替:' : 'Media:'}</span>
-            </span>
-            {consolidatedMedia.map((m, idx) => {
-              const isSelected = activeMediaIndex === idx;
-              const isVid = m.type === 'webm' || m.type === 'video' || m.url.includes('.webm') || m.url.includes('.mp4');
-              const isWebp = m.type === 'webp' || m.url.toLowerCase().includes('.webp');
-              const title = m.title ? (lang === 'ja' ? m.title.ja : m.title.en) : (isVid ? `WebM ${idx + 1}` : (isWebp ? `WebP ${idx + 1}` : `GIF ${idx + 1}`));
-
-              return (
-                <button
-                  key={m.id || idx}
-                  onClick={() => setActiveMediaIndex(idx)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer shadow-2xs ${
-                    isSelected
-                      ? 'bg-orange-600 text-white shadow-xs scale-102 ring-1 ring-orange-400'
-                      : 'bg-white border border-stone-200 text-stone-700 hover:bg-orange-100/60 hover:text-orange-900'
-                  }`}
-                >
-                  {isVid ? <Video className="w-3 h-3" /> : (isWebp ? <ImageIcon className="w-3 h-3" /> : <Film className="w-3 h-3" />)}
-                  <span>{title}</span>
-                  <span className={`text-[9px] px-1 py-0.2 rounded ${isSelected ? 'bg-orange-700 text-white' : 'bg-stone-100 text-stone-500'}`}>
-                    {idx + 1}/{consolidatedMedia.length}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={handlePrevMedia}
-              className="p-1 rounded-lg bg-white border border-stone-200 hover:border-orange-400 text-stone-600 hover:text-orange-600 text-xs transition shadow-2xs cursor-pointer"
-              title={lang === 'ja' ? '前のGIF/動画' : 'Previous Media'}
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleNextMedia}
-              className="p-1 rounded-lg bg-white border border-stone-200 hover:border-orange-400 text-stone-600 hover:text-orange-600 text-xs transition shadow-2xs cursor-pointer"
-              title={lang === 'ja' ? '次のGIF/動画' : 'Next Media'}
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Media Canvas Stage (Shows GIF Demo, WebM Video, or Fallback) */}
       <div className="group/stage relative aspect-[16/10] sm:aspect-[16/9] max-h-[340px] w-full rounded-xl overflow-hidden bg-stone-100 flex items-center justify-center border border-stone-200 shadow-2xs">
         {activeMediaUrl ? (
@@ -469,26 +406,6 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
               <Maximize2 className="w-3.5 h-3.5" />
               <span>{lang === 'ja' ? '拡大' : 'Enlarge'}</span>
             </button>
-
-            {/* Floating Left/Right Arrows on hover when multiple media */}
-            {consolidatedMedia.length > 1 && (
-              <>
-                <button
-                  onClick={handlePrevMedia}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-orange-600 text-white transition opacity-0 group-hover/stage:opacity-100 shadow-md cursor-pointer"
-                  title="Previous"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleNextMedia}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-orange-600 text-white transition opacity-0 group-hover/stage:opacity-100 shadow-md cursor-pointer"
-                  title="Next"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </>
-            )}
 
             {/* Media Caption / Title Overlay Bar */}
             {currentMedia?.title && (
