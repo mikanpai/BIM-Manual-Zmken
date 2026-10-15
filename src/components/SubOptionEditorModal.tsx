@@ -125,17 +125,6 @@ export const SubOptionEditorModal: React.FC<SubOptionEditorModalProps> = ({
     try { setMediaUrl(await uploadMediaFile(file, 'sub-option-media')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
   };
 
-  const handleStepChange = (index: number, field: 'titleJa' | 'titleEn' | 'instructionJa' | 'instructionEn', value: string) => {
-    const updated = [...steps];
-    const s = { ...updated[index] };
-    if (field === 'titleJa') s.title = { ...s.title, ja: value };
-    if (field === 'titleEn') s.title = { ...s.title, en: value };
-    if (field === 'instructionJa') s.instruction = { ...s.instruction, ja: value };
-    if (field === 'instructionEn') s.instruction = { ...s.instruction, en: value };
-    updated[index] = s;
-    setSteps(updated);
-  };
-
   const handleSave = () => {
     const updated: SubOptionItem = {
       ...subOption,
@@ -338,57 +327,6 @@ export const SubOptionEditorModal: React.FC<SubOptionEditorModalProps> = ({
                   className="mt-1.5 w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white"
                 />
               </div>
-            </div>
-          </div>
-
-          {/* 4 Steps for manual scrubber */}
-          <div className="space-y-3">
-            <div className="font-bold text-stone-900 text-xs">
-              {lang === 'ja' ? '操作手順ステップ (1, 2, 3, 4)' : 'Operation Steps (1, 2, 3, 4)'}
-            </div>
-
-            <div className="space-y-2">
-              {steps.map((step, idx) => (
-                <div key={step.id || idx} className="p-3 rounded-lg border border-stone-200 bg-stone-50 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={step.title.ja}
-                        onChange={(e) => handleStepChange(idx, 'titleJa', e.target.value)}
-                        placeholder={`ステップ ${idx + 1} タイトル (日本語)`}
-                        className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white font-medium"
-                      />
-                      <input
-                        type="text"
-                        value={step.title.en}
-                        onChange={(e) => handleStepChange(idx, 'titleEn', e.target.value)}
-                        placeholder={`Step ${idx + 1} Title (English)`}
-                        className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white font-medium"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-7">
-                    <textarea
-                      rows={2}
-                      value={step.instruction.ja}
-                      onChange={(e) => handleStepChange(idx, 'instructionJa', e.target.value)}
-                      placeholder={`ステップ ${idx + 1} の操作説明 (日本語)`}
-                      className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white"
-                    />
-                    <textarea
-                      rows={2}
-                      value={step.instruction.en}
-                      onChange={(e) => handleStepChange(idx, 'instructionEn', e.target.value)}
-                      placeholder={`Step ${idx + 1} Instruction (English)`}
-                      className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white"
-                    />
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
