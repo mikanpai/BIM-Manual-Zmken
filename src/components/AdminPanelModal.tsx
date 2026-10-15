@@ -233,11 +233,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
     const cat = localCategories[index];
     const confirmMsg = lang === 'ja'
-      ? `カテゴリ「${cat.name.ja}」を削除しますか？`
-      : `Delete category "${cat.name.en}"?`;
+      ? `カテゴリ「${cat.name.ja}」と、このカテゴリ内の${localTools.filter((tool) => tool.categoryId === cat.id).length}件のツールを削除しますか？`
+      : `Delete category "${cat.name.en}" and its ${localTools.filter((tool) => tool.categoryId === cat.id).length} tool(s)?`;
     if (window.confirm(confirmMsg)) {
       const updated = localCategories.filter((_, i) => i !== index);
       setLocalCategories(updated);
+      // A deleted ribbon category must not leave orphan tools to reappear
+      // after saving/reloading the shared manual state.
+      setLocalTools((currentTools) => currentTools.filter((tool) => tool.categoryId !== cat.id));
       if (selectedCatId === cat.id) {
         setSelectedCatId(updated[0].id);
       }
@@ -571,6 +574,77 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   ) as string[];
 
   const standaloneTools = categoryTools.filter((t) => !t.dropdownGroup);
+
+  // ---- Display ORDER controls -------------------------------------------
+  // The ribbon renders tools in the order of the `tools` array (no automatic
+  // sorting), so changing the order here = changing the array order.
+
+  // Swap a tool with the previous/next tool that belongs to the same "peer" set
+  const moveToolBy = (toolId: string, direction: -1 | 1, isPeer: (t: ToolItem) => boolean) => {
+    setLocalTools((prev) => {
+      const from = prev.findIndex((t) => t.id === toolId);
+      if (from < 0) return prev;
+      let to = from + direction;
+      while (to >= 0 && to < prev.length && !isPeer(prev[to])) to += direction;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+  };
+
+  // Move a ribbon group (柱ツール, 梁ツール ...) left/right inside the selected category
+  const moveGroupBy = (groupKey: string, direction: -1 | 1) => {
+    setLocalTools((prev) => {
+      const inCat = prev.filter((t) => t.categoryId === selectedCatId);
+      const keys = Array.from(new Set(inCat.map((t) => t.subgroup.ja)));
+      const idx = keys.indexOf(groupKey);
+      const target = idx + direction;
+      if (idx < 0 || target < 0 || target >= keys.length) return prev;
+      [keys[idx], keys[target]] = [keys[target], keys[idx]];
+      const reordered = keys.flatMap((k) => inCat.filter((t) => t.subgroup.ja === k));
+      let i = 0;
+      return prev.map((t) => (t.categoryId === selectedCatId ? reordered[i++] : t));
+    });
+  };
+
+  // Move a whole dropdown button left/right (its tools keep their inner order)
+  const moveDropdownGroupBy = (gId: string, direction: -1 | 1) => {
+    setLocalTools((prev) => {
+      const inCat = prev.filter((t) => t.categoryId === selectedCatId && t.dropdownGroup);
+      const ids = Array.from(new Set(inCat.map((t) => t.dropdownGroup as string)));
+      const idx = ids.indexOf(gId);
+      const target = idx + direction;
+      if (idx < 0 || target < 0 || target >= ids.length) return prev;
+      [ids[idx], ids[target]] = [ids[target], ids[idx]];
+      const reordered = ids.flatMap((id) => inCat.filter((t) => t.dropdownGroup === id));
+      let i = 0;
+      return prev.map((t) => (t.categoryId === selectedCatId && t.dropdownGroup ? reordered[i++] : t));
+    });
+  };
+
+  const renderOrderButtons = (onUp: () => void, onDown: () => void, canUp: boolean, canDown: boolean) => (
+    <div className="flex items-center gap-0.5 shrink-0">
+      <button
+        type="button"
+        onClick={onUp}
+        disabled={!canUp}
+        className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+        title={lang === 'ja' ? '前へ移動（左/上）' : 'Move earlier (left/up)'}
+      >
+        <ArrowUp className="w-3 h-3" />
+      </button>
+      <button
+        type="button"
+        onClick={onDown}
+        disabled={!canDown}
+        className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+        title={lang === 'ja' ? '後ろへ移動（右/下）' : 'Move later (right/down)'}
+      >
+        <ArrowDown className="w-3 h-3" />
+      </button>
+    </div>
+  );
 
   // Tab definitions 1 to 7 for quick direct navigation
   const ADMIN_TABS = [
@@ -1058,7 +1132,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               {/* List of Groupings in Selected Category */}
               <div className="space-y-4">
                 {Object.keys(categoryGroups).length > 0 ? (
-                  Object.entries(categoryGroups).map(([groupKey, groupObj]) => {
+                  Object.entries(categoryGroups).map(([groupKey, groupObj], gIdx, gArr) => {
                     const gTools = groupObj.tools;
                     const isEditingThis = editingGroupJa === groupKey;
 
@@ -1125,6 +1199,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           )}
 
                           <div className="flex items-center gap-2">
+                            {!isEditingThis && renderOrderButtons(
+                              () => moveGroupBy(groupKey, -1),
+                              () => moveGroupBy(groupKey, 1),
+                              gIdx > 0,
+                              gIdx < gArr.length - 1
+                            )}
                             {!isEditingThis && (
                               <button
                                 type="button"
@@ -1153,7 +1233,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
                         {/* Tools in this Group */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {gTools.map((t) => (
+                          {gTools.map((t, tIdx) => (
                             <div
                               key={t.id}
                               className="p-2.5 rounded-xl bg-white border border-stone-200 flex items-center justify-between gap-2 shadow-2xs"
@@ -1173,6 +1253,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   )}
                                 </div>
                               </div>
+
+                              {renderOrderButtons(
+                                () => moveToolBy(t.id, -1, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey),
+                                () => moveToolBy(t.id, 1, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey),
+                                tIdx > 0,
+                                tIdx < gTools.length - 1
+                              )}
 
                               {/* Move tool to another group selector */}
                               <select
@@ -1304,7 +1391,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 </div>
 
                 {dropdownGroupIds.length > 0 ? (
-                  dropdownGroupIds.map((gId) => {
+                  dropdownGroupIds.map((gId, dgIdx) => {
                     const groupTools = categoryTools.filter((t) => t.dropdownGroup === gId);
                     const trigger = groupTools.find((t) => t.isDropdownTrigger) || groupTools[0];
                     const gNameJa = trigger?.dropdownGroupName?.ja || gId;
@@ -1340,6 +1427,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           </div>
 
                           <div className="flex items-center gap-2">
+                            {renderOrderButtons(
+                              () => moveDropdownGroupBy(gId, -1),
+                              () => moveDropdownGroupBy(gId, 1),
+                              dgIdx > 0,
+                              dgIdx < dropdownGroupIds.length - 1
+                            )}
                             {/* USER REQUESTED: Edit icon and label for dropdown button group */}
                             <button
                               type="button"
@@ -1552,6 +1645,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   </span>
                                 )}
 
+                                {renderOrderButtons(
+                                  () => moveToolBy(gt.id, -1, (x) => x.dropdownGroup === gId),
+                                  () => moveToolBy(gt.id, 1, (x) => x.dropdownGroup === gId),
+                                  idx > 0,
+                                  idx < groupTools.length - 1
+                                )}
+
                                 {!gt.isDropdownTrigger && (
                                   <button
                                     type="button"
@@ -1599,7 +1699,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {standaloneTools.map((st) => (
+                  {standaloneTools.map((st, sIdx) => (
                     <div
                       key={st.id}
                       className="p-3.5 rounded-xl border border-stone-200 bg-white hover:border-orange-300 flex items-center justify-between gap-3 shadow-2xs transition"
@@ -1623,6 +1723,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           <span className="font-mono text-[10px] text-stone-400 font-semibold">
                             [{st.shortcut}]
                           </span>
+                        )}
+
+                        {renderOrderButtons(
+                          () => moveToolBy(st.id, -1, (x) => x.categoryId === selectedCatId && !x.dropdownGroup),
+                          () => moveToolBy(st.id, 1, (x) => x.categoryId === selectedCatId && !x.dropdownGroup),
+                          sIdx > 0,
+                          sIdx < standaloneTools.length - 1
                         )}
 
                         {/* Move into existing or new dropdown */}
@@ -2137,8 +2244,8 @@ VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`}
                   </div>
                   <ol className="list-decimal list-inside space-y-1 text-[11px] text-sky-800">
                     <li>{lang === 'ja' ? 'Supabaseダッシュボードの「Storage」を開き、「New Bucket」で「gloobe-assets」という名前のバケットを作成（Public BucketをON）にします。' : 'In Supabase Dashboard → Storage, create a public bucket named "gloobe-assets" (Public Bucket: ON).'}</li>
-                    <li>{lang === 'ja' ? 'GLOOBEのCAD操作画面を録画したGIFやWebMファイルをアップロードします。' : 'Upload your recorded GIF or WebM files.'}</li>
-                    <li>{lang === 'ja' ? 'アップロードしたファイルの「Get URL」で公開URLをコピーし、上記の gloobe_media テーブルの media_url に登録します。' : 'Copy the public URL and insert into gloobe_media table media_url.'}</li>
+                    <li>{lang === 'ja' ? 'SQLスキーマを実行後、エディタのファイル選択でGIF、WebP、WebM、画像を選択すると、自動的にこのバケットへアップロードされます。' : 'After running the SQL schema, choosing a GIF, WebP, WebM, or image in an editor uploads it to this bucket automatically.'}</li>
+                    <li>{lang === 'ja' ? 'エディタは公開Storage URLとマニュアル設定をSupabaseに保存するため、同じ環境変数で公開したサイトなら別の端末でも表示されます。' : 'The editor saves the public Storage URL and manual configuration to Supabase, so any deployment with these environment variables shows the same media.'}</li>
                   </ol>
                 </div>
 
