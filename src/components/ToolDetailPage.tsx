@@ -4,7 +4,7 @@ import { CadIcon } from './CadIcon';
 import { InteractiveCadCanvas } from './InteractiveCadCanvas';
 import { 
   ArrowLeft, ArrowRight, ChevronRight, Edit3, Printer, Share2, 
-  CheckCircle2, Circle, HelpCircle, AlertTriangle, Film, 
+  HelpCircle, AlertTriangle, Film, 
   Image as ImageIcon, MousePointer, BookOpen, Sparkles,
   ExternalLink, Plus, Check, Layers
 } from 'lucide-react';
@@ -38,8 +38,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
   onSaveTool,
   onOpenLightbox,
 }) => {
-  // Interactive step completion tracking (for trainee practice)
-  const [completedSteps, setCompletedSteps] = useState<{ [id: string]: boolean }>({});
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedSubOptionId, setSelectedSubOptionId] = useState<string | null>(
     tool.subOptions && tool.subOptions.length > 0 ? tool.subOptions[0].id : null
@@ -76,13 +74,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
 
   // Related tools
   const relatedTools = allTools.filter((t) => tool.relatedToolIds.includes(t.id));
-
-  const toggleStep = (stepId: string) => {
-    setCompletedSteps((prev) => ({
-      ...prev,
-      [stepId]: !prev[stepId],
-    }));
-  };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -299,98 +290,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
                   canDelete={previewBoxes.length > 1}
                 />
               ))}
-            </div>
-          </div>
-
-          {/* Section 3: Step-by-Step Instructions (操作手順) */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-orange-600" />
-                <h2 className="text-base font-bold text-stone-900">
-                  {lang === 'ja' ? '操作手順ガイド' : 'Step-by-Step Operating Guide'}
-                </h2>
-              </div>
-              <span className="text-xs text-stone-400">
-                {lang === 'ja' ? '番号順にクリックして進めてください' : 'Follow steps in sequence'}
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              {tool.steps.map((step) => {
-                const isDone = !!completedSteps[step.id];
-                return (
-                  <div
-                    key={step.id}
-                    className={`p-4 rounded-xl border transition-all ${
-                      isDone 
-                        ? 'border-emerald-300 bg-emerald-50/40' 
-                        : 'border-stone-200 hover:border-orange-300 bg-stone-50/50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleStep(step.id)}
-                          className="mt-0.5 text-stone-400 hover:text-emerald-600 transition shrink-0"
-                          title={isDone ? (lang === 'ja' ? '完了を取り消す' : 'Mark incomplete') : (lang === 'ja' ? '完了にする' : 'Mark complete')}
-                        >
-                          {isDone ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                          ) : (
-                            <Circle className="w-5 h-5 text-stone-400 hover:text-orange-500" />
-                          )}
-                        </button>
-
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-orange-600 text-white leading-none">
-                              Step {step.stepNumber}
-                            </span>
-                            <h3 className={`text-sm font-bold text-stone-900 ${isDone ? 'line-through text-stone-500' : ''}`}>
-                              {lang === 'ja' ? step.title.ja : step.title.en}
-                            </h3>
-                          </div>
-
-                          <p className="text-xs sm:text-sm text-stone-700 leading-relaxed font-normal pt-1">
-                            {lang === 'ja' ? step.instruction.ja : step.instruction.en}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Step specific illustration if present */}
-                    {step.mediaUrl && (
-                      <div className="mt-3 pt-3 border-t border-stone-200/80">
-                        <div 
-                          onClick={() => onOpenLightbox(
-                            step.mediaUrl!, 
-                            lang === 'ja' ? step.title.ja : step.title.en,
-                            step.mediaCaption ? (lang === 'ja' ? step.mediaCaption.ja : step.mediaCaption.en) : undefined
-                          )}
-                          className="relative max-w-sm rounded-xl overflow-hidden border border-stone-200 hover:border-orange-500 cursor-pointer group shadow-2xs bg-stone-100"
-                        >
-                          <img
-                            src={step.mediaUrl}
-                            alt={step.title.ja}
-                            className="w-full h-36 object-cover group-hover:scale-105 transition duration-200"
-                          />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-semibold gap-1">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>{lang === 'ja' ? '拡大表示' : 'Enlarge'}</span>
-                          </div>
-                        </div>
-                        {step.mediaCaption && (
-                          <p className="text-[11px] text-stone-500 mt-1 italic">
-                            {lang === 'ja' ? step.mediaCaption.ja : step.mediaCaption.en}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
             </div>
           </div>
 

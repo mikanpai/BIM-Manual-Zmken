@@ -4,7 +4,7 @@ import { CadIcon } from './CadIcon';
 import { InteractiveCadCanvas } from './InteractiveCadCanvas';
 import { 
   ArrowLeft, ArrowRight, ChevronRight, Edit3, Printer, Share2, 
-  CheckCircle2, Circle, HelpCircle, AlertTriangle, Film, 
+  HelpCircle, AlertTriangle, Film, 
   Keyboard, Sparkles, Plus, Check, Layers
 } from 'lucide-react';
 import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
@@ -35,7 +35,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
   onSaveSubOption,
   onSaveTool,
 }) => {
-  const [completedSteps, setCompletedSteps] = useState<{ [id: string]: boolean }>({});
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Preview Box Editor State
@@ -109,13 +108,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
           }
         }
       ];
-
-  const toggleStep = (stepId: string) => {
-    setCompletedSteps((prev) => ({
-      ...prev,
-      [stepId]: !prev[stepId],
-    }));
-  };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -391,67 +383,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
             </div>
           </div>
 
-          {/* Section 3: Step-by-Step Instructions */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-orange-600" />
-                <h2 className="text-base font-bold text-stone-900">
-                  {lang === 'ja' ? '操作手順ガイド (実務ステップ)' : 'Step-by-Step Operating Guide'}
-                </h2>
-              </div>
-              <span className="text-xs text-stone-400">
-                {lang === 'ja' ? '番号順にクリックして進めてください' : 'Follow steps in sequence'}
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {steps.map((step) => {
-                const isDone = !!completedSteps[step.id];
-                return (
-                  <div
-                    key={step.id}
-                    className={`p-4 rounded-xl border transition-all ${
-                      isDone 
-                        ? 'border-emerald-300 bg-emerald-50/40' 
-                        : 'border-stone-200 hover:border-orange-300 bg-stone-50/50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleStep(step.id)}
-                          className="mt-0.5 shrink-0 text-stone-400 hover:text-emerald-600 transition"
-                        >
-                          {isDone ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                          ) : (
-                            <Circle className="w-5 h-5" />
-                          )}
-                        </button>
-
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                              {step.stepNumber}
-                            </span>
-                            <h3 className={`text-sm font-bold ${isDone ? 'line-through text-stone-400' : 'text-stone-900'}`}>
-                              {lang === 'ja' ? step.title.ja : step.title.en}
-                            </h3>
-                          </div>
-
-                          <p className="text-xs text-stone-600 leading-relaxed font-normal whitespace-pre-line pl-7">
-                            {lang === 'ja' ? step.instruction.ja : step.instruction.en}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
         </div>
 
@@ -487,35 +418,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
             </button>
           </div>
 
-          {/* Box 2: Trainee Practice Checklist */}
-          <div className="bg-gradient-to-br from-orange-50 via-white to-amber-50/70 text-stone-800 rounded-2xl p-5 shadow-xs border border-orange-200/90 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-orange-800">
-              {lang === 'ja' ? '社内研修 習熟度チェック' : 'Trainee Practice Status'}
-            </h3>
-            
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-stone-600">{lang === 'ja' ? '完了ステップ数:' : 'Completed Steps:'}</span>
-              <span className="font-extrabold text-orange-600 text-sm">
-                {Object.values(completedSteps).filter(Boolean).length} / {steps.length}
-              </span>
-            </div>
-
-            {/* Progress bar */}
-            <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-orange-600 transition-all duration-300"
-                style={{
-                  width: `${(Object.values(completedSteps).filter(Boolean).length / steps.length) * 100}%`,
-                }}
-              />
-            </div>
-
-            <p className="text-[11px] text-stone-600 leading-snug">
-              {lang === 'ja'
-                ? '手順に沿って実務練習を行い、チェックをつけて習熟を確認します。'
-                : 'Follow the steps and check off items as you practice in GLOOBE.'}
-            </p>
-          </div>
 
         </div>
 
