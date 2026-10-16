@@ -426,30 +426,26 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
         )}
       </div>
 
-            {isMediaExpanded && activeMediaUrl && (
+                  {isMediaExpanded && activeMediaUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-5 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-2 sm:p-4"
           onClick={() => setIsMediaExpanded(false)}
         >
           <div
-            className="flex h-full w-full max-w-[1600px] flex-col overflow-hidden rounded-2xl bg-stone-950 text-white shadow-2xl"
+            className="flex h-full w-full max-w-[1800px] flex-col overflow-hidden rounded-2xl bg-stone-950 text-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-white/15 px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
               <div className="min-w-0">
                 <div className="truncate text-sm font-bold">
                   {currentMedia?.title
-                    ? (lang === 'ja'
-                        ? currentMedia.title.ja
-                        : currentMedia.title.en)
+                    ? (lang === 'ja' ? currentMedia.title.ja : currentMedia.title.en)
                     : displayTitle}
                 </div>
                 {activeStep?.title && (
-                  <div className="mt-1 truncate text-xs text-stone-400">
-                    {lang === 'ja'
-                      ? activeStep.title.ja
-                      : activeStep.title.en}
+                  <div className="truncate text-xs text-stone-400">
+                    {lang === 'ja' ? activeStep.title.ja : activeStep.title.en}
                   </div>
                 )}
               </div>
@@ -457,18 +453,17 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
               <button
                 type="button"
                 onClick={() => setIsMediaExpanded(false)}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold transition hover:bg-orange-600"
-                title={lang === 'ja' ? '縮小' : 'Minimize'}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold hover:bg-orange-600"
               >
                 <Minimize2 className="h-4 w-4" />
-                <span>{lang === 'ja' ? '縮小' : 'Minimize'}</span>
+                {lang === 'ja' ? '縮小' : 'Minimize'}
               </button>
             </div>
 
-            {/* Main content: media on the left, linked description on the right */}
-            <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
-              {/* Left: video / GIF */}
-              <div className="flex min-h-[35vh] items-center justify-center overflow-hidden border-b border-white/10 bg-black p-3 sm:p-5 lg:min-h-0 lg:border-b-0 lg:border-r">
+            {/* Main viewing area */}
+            <div className="flex min-h-0 flex-1 flex-col">
+              {/* Large video area */}
+              <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-2 sm:p-4">
                 {isVideo ? (
                   <video
                     key={activeMediaUrl}
@@ -478,7 +473,7 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
                     muted
                     controls
                     playsInline
-                    className="max-h-full max-w-full rounded-lg object-contain"
+                    className="h-full w-full object-contain"
                   />
                 ) : (
                   <img
@@ -486,104 +481,78 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
                     src={activeMediaUrl}
                     alt={
                       currentMedia?.title
-                        ? (lang === 'ja'
-                            ? currentMedia.title.ja
-                            : currentMedia.title.en)
+                        ? (lang === 'ja' ? currentMedia.title.ja : currentMedia.title.en)
                         : displayTitle
                     }
-                    className="max-h-full max-w-full rounded-lg object-contain"
+                    className="h-full w-full object-contain"
                   />
                 )}
               </div>
 
-              {/* Right: description linked to the selected step */}
-              <div className="flex min-h-0 flex-col overflow-y-auto bg-stone-900">
-                <div className="flex-1 p-5 sm:p-6">
-                  {activeStep?.title && (
-                    <h3 className="mb-4 text-lg font-bold leading-relaxed text-white">
-                      {lang === 'ja'
-                        ? activeStep.title.ja
-                        : activeStep.title.en}
-                    </h3>
-                  )}
-
-                  {activeStep?.instruction ? (
-                    <div className="whitespace-pre-wrap text-sm leading-7 text-stone-300">
-                      {lang === 'ja'
-                        ? activeStep.instruction.ja
-                        : activeStep.instruction.en}
-                    </div>
-                  ) : (
-                    <p className="text-sm leading-7 text-stone-400">
-                      {lang === 'ja'
-                        ? 'この項目にはまだ説明が登録されていません。'
-                        : 'No description has been added for this item yet.'}
-                    </p>
-                  )}
-                </div>
-
-                {/* Previous / Next buttons use the adjacent item titles */}
-                {steps.length > 1 && (
-                  <div className="grid grid-cols-2 gap-3 border-t border-white/10 p-4">
-                    <button
-                      type="button"
-                      onClick={handlePrevStep}
-                      className="flex min-w-0 items-center gap-2 rounded-xl border border-white/15 bg-white/5 p-3 text-left transition hover:border-orange-500 hover:bg-orange-600/15"
-                      title={
-                        lang === 'ja'
-                          ? '前の項目'
-                          : 'Previous item'
-                      }
-                    >
-                      <ChevronLeft className="h-5 w-5 shrink-0 text-orange-400" />
-                      <span className="min-w-0">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-stone-400">
-                          {lang === 'ja' ? '前へ' : 'PREVIOUS'}
-                        </span>
-                        <span className="mt-1 block break-words text-xs font-semibold leading-relaxed text-white">
-                          {steps[
-                            (currentStepIndex - 1 + steps.length) % steps.length
-                          ]?.title
-                            ? (lang === 'ja'
-                                ? steps[
-                                    (currentStepIndex - 1 + steps.length) % steps.length
-                                  ].title.ja
-                                : steps[
-                                    (currentStepIndex - 1 + steps.length) % steps.length
-                                  ].title.en)
-                            : (lang === 'ja' ? '前の項目' : 'Previous item')}
-                        </span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleNextStep}
-                      className="flex min-w-0 items-center justify-end gap-2 rounded-xl border border-white/15 bg-white/5 p-3 text-right transition hover:border-orange-500 hover:bg-orange-600/15"
-                      title={
-                        lang === 'ja'
-                          ? '次の項目'
-                          : 'Next item'
-                      }
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-stone-400">
-                          {lang === 'ja' ? '次へ' : 'NEXT'}
-                        </span>
-                        <span className="mt-1 block break-words text-xs font-semibold leading-relaxed text-white">
-                          {steps[(currentStepIndex + 1) % steps.length]?.title
-                            ? (lang === 'ja'
-                                ? steps[(currentStepIndex + 1) % steps.length].title.ja
-                                : steps[(currentStepIndex + 1) % steps.length].title.en)
-                            : (lang === 'ja' ? '次の項目' : 'Next item')}
-                        </span>
-                      </span>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-orange-400" />
-                    </button>
-                  </div>
+              {/* Summary strip below video — green-box position */}
+              <div className="shrink-0 border-t border-white/10 bg-stone-900 px-4 py-3 sm:px-6">
+                {activeStep?.title && (
+                  <h3 className="mb-1 text-sm font-bold text-white">
+                    {lang === 'ja' ? activeStep.title.ja : activeStep.title.en}
+                  </h3>
                 )}
+
+                <p className="whitespace-pre-wrap text-xs leading-relaxed text-stone-300 sm:text-sm">
+                  {activeStep?.instruction
+                    ? (lang === 'ja'
+                        ? activeStep.instruction.ja
+                        : activeStep.instruction.en)
+                    : (lang === 'ja'
+                        ? 'この項目にはまだ説明が登録されていません。'
+                        : 'No description has been added for this item yet.')}
+                </p>
               </div>
             </div>
+
+            {/* Previous / Next navigation */}
+            {steps.length > 1 && (
+              <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-white/10 bg-stone-950 p-2.5 sm:gap-3 sm:p-3">
+                <button
+                  type="button"
+                  onClick={handlePrevStep}
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-left transition hover:border-orange-500 hover:bg-orange-600/15 sm:px-4"
+                >
+                  <ChevronLeft className="h-5 w-5 shrink-0 text-orange-400" />
+                  <span className="min-w-0">
+                    <span className="block text-[10px] text-stone-400">
+                      {lang === 'ja' ? '前へ' : 'PREVIOUS'}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs font-semibold">
+                      {steps[(currentStepIndex - 1 + steps.length) % steps.length]?.title
+                        ? (lang === 'ja'
+                            ? steps[(currentStepIndex - 1 + steps.length) % steps.length].title.ja
+                            : steps[(currentStepIndex - 1 + steps.length) % steps.length].title.en)
+                        : (lang === 'ja' ? '前の項目' : 'Previous item')}
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleNextStep}
+                  className="flex min-w-0 items-center justify-end gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-right transition hover:border-orange-500 hover:bg-orange-600/15 sm:px-4"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[10px] text-stone-400">
+                      {lang === 'ja' ? '次へ' : 'NEXT'}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs font-semibold">
+                      {steps[(currentStepIndex + 1) % steps.length]?.title
+                        ? (lang === 'ja'
+                            ? steps[(currentStepIndex + 1) % steps.length].title.ja
+                            : steps[(currentStepIndex + 1) % steps.length].title.en)
+                        : (lang === 'ja' ? '次の項目' : 'Next item')}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-orange-400" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
