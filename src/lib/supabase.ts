@@ -139,56 +139,216 @@ CREATE POLICY "Allow public write access on manual state"
 ON public.gloobe_manual_state FOR ALL USING (true) WITH CHECK (true);
 
 -- -------------------------------------------------------------------------
--- 3b. Row-per-item storage used by the app for tools, tabs and company settings
+-- 3b. Relational tables used by the app (tools, tabs, steps, media ...)
 -- -------------------------------------------------------------------------
 -- =========================================================================
--- GLOOBE BIM Manual: row-per-item storage (run ONCE in Supabase > SQL Editor)
--- Safe to re-run. Does not touch your old gloobe_manual_state row, which is
--- used automatically to fill the new tables the first time the site opens.
+-- GLOOBE BIM Manual: real relational tables (run ONCE in Supabase > SQL Editor)
+-- Safe to re-run. Old tables are never modified or deleted; the app copies
+-- your existing data into these tables automatically the first time it opens.
 -- =========================================================================
 
-CREATE TABLE IF NOT EXISTS public.gloobe_categories (
-    id TEXT PRIMARY KEY,
-    data JSONB NOT NULL,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    updated_at TIMESTAMPTZ DEFAULT now()
+-- 1. Tabs -----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.manual_categories (
+    id               TEXT PRIMARY KEY,
+    name_ja          TEXT NOT NULL DEFAULT '',
+    name_en          TEXT NOT NULL DEFAULT '',
+    description_ja   TEXT,
+    description_en   TEXT,
+    icon_name        TEXT,
+    accent_color     TEXT,
+    cat_order        INTEGER,
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    updated_at       TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public.gloobe_tools (
-    id TEXT PRIMARY KEY,
-    category_id TEXT,
-    data JSONB NOT NULL,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    updated_at TIMESTAMPTZ DEFAULT now()
+-- 2. Tools: one row per tool ----------------------------------------------
+CREATE TABLE IF NOT EXISTS public.manual_tools (
+    id                              TEXT PRIMARY KEY,
+    category_id                     TEXT,                 -- the tab (manual_categories.id)
+    grouping_ja                     TEXT NOT NULL DEFAULT '',   -- ribbon grouping, e.g. ゾーン
+    grouping_en                     TEXT NOT NULL DEFAULT '',   --                     Zone
+    name_ja                         TEXT NOT NULL DEFAULT '',
+    name_en                         TEXT NOT NULL DEFAULT '',
+    short_desc_ja                   TEXT,
+    short_desc_en                   TEXT,
+    full_desc_ja                    TEXT,
+    full_desc_en                    TEXT,
+    shortcut                        TEXT,
+    icon_type                       TEXT,
+    custom_icon_url                 TEXT,
+    simulator_gif_url               TEXT,
+    dropdown_group                  TEXT,
+    dropdown_group_name_ja          TEXT,
+    dropdown_group_name_en          TEXT,
+    dropdown_section_ja             TEXT,
+    dropdown_section_en             TEXT,
+    is_dropdown_trigger             BOOLEAN,
+    dropdown_group_icon_type        TEXT,
+    dropdown_group_custom_icon_url  TEXT,
+    tips_ja                         TEXT[] DEFAULT '{}',
+    tips_en                         TEXT[] DEFAULT '{}',
+    warnings_ja                     TEXT[] DEFAULT '{}',
+    warnings_en                     TEXT[] DEFAULT '{}',
+    related_tool_ids                TEXT[] DEFAULT '{}',
+    is_essential                    BOOLEAN,
+    phase                           TEXT,
+    is_custom                       BOOLEAN,
+    tool_updated_at                 TEXT,
+    sort_order                      INTEGER NOT NULL DEFAULT 0,   -- order in the ribbon
+    updated_at                      TIMESTAMPTZ DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_gloobe_tools_category ON public.gloobe_tools(category_id);
-CREATE INDEX IF NOT EXISTS idx_gloobe_tools_sort ON public.gloobe_tools(sort_order);
+CREATE INDEX IF NOT EXISTS idx_manual_tools_category ON public.manual_tools(category_id);
+CREATE INDEX IF NOT EXISTS idx_manual_tools_sort     ON public.manual_tools(sort_order);
 
-CREATE TABLE IF NOT EXISTS public.gloobe_settings (
-    key TEXT PRIMARY KEY,
-    data JSONB NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT now()
+-- 3. Sub-options (one row each, linked to a tool) --------------------------
+CREATE TABLE IF NOT EXISTS public.manual_sub_options (
+    key              TEXT PRIMARY KEY,
+    item_id          TEXT NOT NULL,
+    tool_id          TEXT NOT NULL,                      -- manual_tools.id
+    name_ja          TEXT NOT NULL DEFAULT '',
+    name_en          TEXT NOT NULL DEFAULT '',
+    short_desc_ja    TEXT,
+    short_desc_en    TEXT,
+    full_desc_ja     TEXT,
+    full_desc_en     TEXT,
+    instruction_ja   TEXT,
+    instruction_en   TEXT,
+    icon_type        TEXT,
+    custom_icon_url  TEXT,
+    shortcut         TEXT,
+    media_url        TEXT,
+    tips_ja          TEXT[],
+    tips_en          TEXT[],
+    warnings_ja      TEXT[],
+    warnings_en      TEXT[],
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    updated_at       TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_manual_sub_options_tool ON public.manual_sub_options(tool_id);
+
+-- 4. Preview boxes (owned by a tool or a sub-option) -----------------------
+CREATE TABLE IF NOT EXISTS public.manual_preview_boxes (
+    key              TEXT PRIMARY KEY,
+    item_id          TEXT NOT NULL,
+    owner_kind       TEXT NOT NULL,                      -- 'tool' | 'sub_option'
+    owner_key        TEXT NOT NULL,
+    tool_id          TEXT NOT NULL,
+    box_title_ja     TEXT,
+    box_title_en     TEXT,
+    tool_name_ja     TEXT,
+    tool_name_en     TEXT,
+    description_ja   TEXT,
+    description_en   TEXT,
+    logo_icon_url    TEXT,
+    icon_type        TEXT,
+    gif_url          TEXT,
+    gif_urls         TEXT[],
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    updated_at       TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_manual_preview_boxes_owner ON public.manual_preview_boxes(owner_key);
+CREATE INDEX IF NOT EXISTS idx_manual_preview_boxes_tool  ON public.manual_preview_boxes(tool_id);
+
+-- 5. Steps (the 1-2-3-4 buttons under a preview box) -----------------------
+CREATE TABLE IF NOT EXISTS public.manual_steps (
+    key                TEXT PRIMARY KEY,
+    item_id            TEXT NOT NULL,
+    owner_kind         TEXT NOT NULL,                    -- 'tool' | 'sub_option' | 'preview_box'
+    owner_key          TEXT NOT NULL,
+    tool_id            TEXT NOT NULL,
+    step_number        INTEGER,
+    title_ja           TEXT,
+    title_en           TEXT,
+    instruction_ja     TEXT,
+    instruction_en     TEXT,
+    media_url          TEXT,
+    media_id           TEXT,
+    media_caption_ja   TEXT,
+    media_caption_en   TEXT,
+    sort_order         INTEGER NOT NULL DEFAULT 0,
+    updated_at         TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_manual_steps_owner ON public.manual_steps(owner_key);
+CREATE INDEX IF NOT EXISTS idx_manual_steps_tool  ON public.manual_steps(tool_id);
+
+-- 6. Tool media (gallery images / GIFs) ------------------------------------
+CREATE TABLE IF NOT EXISTS public.manual_tool_media (
+    key            TEXT PRIMARY KEY,
+    item_id        TEXT NOT NULL,
+    tool_id        TEXT NOT NULL,
+    url            TEXT,
+    title_ja       TEXT,
+    title_en       TEXT,
+    caption_ja     TEXT,
+    caption_en     TEXT,
+    media_type     TEXT,
+    is_primary     BOOLEAN,
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    updated_at     TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_manual_tool_media_tool ON public.manual_tool_media(tool_id);
+
+-- 7. Preview media (the GIF / WebM videos inside a preview box) ------------
+CREATE TABLE IF NOT EXISTS public.manual_preview_media (
+    key            TEXT PRIMARY KEY,
+    item_id        TEXT NOT NULL,
+    box_key        TEXT NOT NULL,                        -- manual_preview_boxes.key
+    tool_id        TEXT NOT NULL,
+    url            TEXT,
+    title_ja       TEXT,
+    title_en       TEXT,
+    caption_ja     TEXT,
+    caption_en     TEXT,
+    media_type     TEXT,
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    updated_at     TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_manual_preview_media_box  ON public.manual_preview_media(box_key);
+CREATE INDEX IF NOT EXISTS idx_manual_preview_media_tool ON public.manual_preview_media(tool_id);
+
+-- 8. Company branding (single row) -----------------------------------------
+CREATE TABLE IF NOT EXISTS public.manual_company (
+    id                            TEXT PRIMARY KEY,      -- always 'default'
+    name_ja                       TEXT,
+    name_en                       TEXT,
+    department_ja                 TEXT,
+    department_en                 TEXT,
+    welcome_notice_ja             TEXT,
+    welcome_notice_en             TEXT,
+    default_preview_box_title_ja  TEXT,
+    default_preview_box_title_en  TEXT,
+    updated_at                    TIMESTAMPTZ DEFAULT now()
 );
 
-ALTER TABLE public.gloobe_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.gloobe_tools      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.gloobe_settings   ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "gloobe_categories_all" ON public.gloobe_categories;
-CREATE POLICY "gloobe_categories_all" ON public.gloobe_categories FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "gloobe_tools_all" ON public.gloobe_tools;
-CREATE POLICY "gloobe_tools_all" ON public.gloobe_tools FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "gloobe_settings_all" ON public.gloobe_settings;
-CREATE POLICY "gloobe_settings_all" ON public.gloobe_settings FOR ALL USING (true) WITH CHECK (true);
-
--- Safety copy of the old single-row data (only created once, only if the old table exists)
+-- Access rules (same open access as before; tighten later with login) ------
 DO $$
+DECLARE t TEXT;
 BEGIN
-  IF to_regclass('public.gloobe_manual_state') IS NOT NULL
-     AND to_regclass('public.gloobe_manual_state_backup') IS NULL THEN
-    EXECUTE 'CREATE TABLE public.gloobe_manual_state_backup AS SELECT *, now() AS backed_up_at FROM public.gloobe_manual_state';
-  END IF;
+  FOREACH t IN ARRAY ARRAY['manual_categories','manual_tools','manual_sub_options',
+                           'manual_preview_boxes','manual_steps','manual_tool_media',
+                           'manual_preview_media','manual_company']
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_all', t);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR ALL USING (true) WITH CHECK (true)', t || '_all', t);
+  END LOOP;
 END $$;
+
+-- A readable overview, e.g.:  order | id | tab | grouping | tool_name | shortcut
+CREATE OR REPLACE VIEW public.manual_tools_overview WITH (security_invoker = true) AS
+SELECT t.sort_order        AS "order",
+       t.id,
+       c.name_ja           AS tab,
+       t.grouping_ja       AS "grouping",
+       t.name_ja           AS tool_name,
+       t.name_en           AS tool_name_en,
+       t.shortcut,
+       t.dropdown_group,
+       (SELECT count(*) FROM public.manual_sub_options s WHERE s.tool_id = t.id) AS sub_options,
+       (SELECT count(*) FROM public.manual_preview_boxes b WHERE b.tool_id = t.id) AS preview_boxes
+FROM public.manual_tools t
+LEFT JOIN public.manual_categories c ON c.id = t.category_id
+ORDER BY t.sort_order;
 
 -- -------------------------------------------------------------------------
 -- 4. Storage setup. Run this in the SQL Editor once, then keep the bucket

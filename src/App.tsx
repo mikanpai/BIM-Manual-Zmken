@@ -23,7 +23,7 @@ import { ImageLightboxModal } from './components/ImageLightboxModal';
 import { Plus, Search, Sparkles, Building2, HelpCircle } from 'lucide-react';
 import { loadSharedManualState } from './lib/supabase';
 import {
-  EMPTY_SNAPSHOT, ManualSnapshot, fetchManual, isCloudConfigured, pushChanges, snapshotsEqual,
+  EMPTY_SNAPSHOT, ManualSnapshot, fetchManual, fetchPreviousJsonStore, isCloudConfigured, pushChanges, snapshotsEqual,
 } from './lib/cloudStore';
 
 type SyncState = { status: 'loading' | 'saved' | 'saving' | 'error' | 'local'; message?: string };
@@ -198,10 +198,14 @@ export default function App() {
       }
       let remote = res.snapshot;
       if (res.empty) {
-        // First run on the new tables: fill them from the old shared row, else from this browser.
-        const legacy = await loadSharedManualState();
+        // First run on the new tables: fill them from the earlier cloud data
+        // (JSON-blob tables, then the old single-row table), else from this browser.
+        const previous = await fetchPreviousJsonStore();
+        const legacy = previous ? null : await loadSharedManualState();
         if (cancelled) return;
-        const old = legacy.state;
+        const old = previous
+          ? { categories: previous.categories, tools: previous.tools, companySettings: previous.company }
+          : legacy?.state;
         const local = latestRef.current;
         remote = {
           categories: Array.isArray(old?.categories) ? (old!.categories as CategoryInfo[]) : local.categories,
@@ -470,9 +474,34 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const content = e.target?.result as string;
-        const parsed = JSON.parse(content);
-        if (parsed.categories && Array.isArray(parsed.categories)) setCategories(parsed.categories);
+        const parsed = JSON.parse(e.target?.result as string);
+        const fileCategories: CategoryInfo[] = Array.isArray(parsed.categories) ? parsed.categories : [];
+        const fileTools: ToolItem[] = Array.isArray(parsed.tools) ? parsed.tools : [];
+
+        const mergeMsg = lang === 'ja'
+          ? `バックアップに ${fileTools.length} 件のツールがあります。\n\n「OK」: 今のデータはそのまま残し、足りないものだけを追加（おすすめ）\n「キャンセル」: 次の画面で全置換するか選びます`
+          : `The backup contains ${fileTools.length} tools.\n\nOK: keep current data and only ADD what is missing (recommended)\nCancel: choose to replace everything on the next screen`;
+
+        if (window.confirm(mergeMsg)) {
+          const current = latestRef.current;
+          const knownCategoryIds = new Set(current.categories.map((c) => c.id));
+          const knownToolIds = new Set(current.tools.map((t) => t.id));
+          const newCategories = fileCategories.filter((c) => !knownCategoryIds.has(c.id));
+          const newTools = fileTools.filter((t) => !knownToolIds.has(t.id));
+          const mergedCategories = [...current.categories, ...newCategories];
+          setCategories(mergedCategories);
+          setTools(keepToolsInCategories([...current.tools, ...newTools], mergedCategories));
+          alert(lang === 'ja'
+            ? `追加しました: ツール ${newTools.length} 件 / タブ ${newCategories.length} 件\n（すでに存在する ${fileTools.length - newTools.length} 件は変更していません）`
+            : `Added ${newTools.length} tools and ${newCategories.length} tabs.\n(${fileTools.length - newTools.length} tools already existed and were not changed.)`);
+          return;
+        }
+
+        const replaceMsg = lang === 'ja'
+          ? '現在のデータをすべて削除して、バックアップの内容に置き換えますか？\n（クラウドのデータも置き換わります）'
+          : 'Replace ALL current data with the backup file?\n(The cloud data will be replaced too.)';
+        if (!window.confirm(replaceMsg)) return;
+        if (fileCategories.length > 0) setCategories(fileCategories);
         if (parsed.companySettings) setCompanySettings(parsed.companySettings);
         if (Array.isArray(parsed.tools)) setTools(parsed.tools);
         alert(lang === 'ja' ? 'マニュアルデータを正常に読み込みました。' : 'Manual imported successfully.');
