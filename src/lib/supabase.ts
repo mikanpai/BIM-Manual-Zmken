@@ -139,6 +139,58 @@ CREATE POLICY "Allow public write access on manual state"
 ON public.gloobe_manual_state FOR ALL USING (true) WITH CHECK (true);
 
 -- -------------------------------------------------------------------------
+-- 3b. Row-per-item storage used by the app for tools, tabs and company settings
+-- -------------------------------------------------------------------------
+-- =========================================================================
+-- GLOOBE BIM Manual: row-per-item storage (run ONCE in Supabase > SQL Editor)
+-- Safe to re-run. Does not touch your old gloobe_manual_state row, which is
+-- used automatically to fill the new tables the first time the site opens.
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS public.gloobe_categories (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.gloobe_tools (
+    id TEXT PRIMARY KEY,
+    category_id TEXT,
+    data JSONB NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gloobe_tools_category ON public.gloobe_tools(category_id);
+CREATE INDEX IF NOT EXISTS idx_gloobe_tools_sort ON public.gloobe_tools(sort_order);
+
+CREATE TABLE IF NOT EXISTS public.gloobe_settings (
+    key TEXT PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.gloobe_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gloobe_tools      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gloobe_settings   ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "gloobe_categories_all" ON public.gloobe_categories;
+CREATE POLICY "gloobe_categories_all" ON public.gloobe_categories FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "gloobe_tools_all" ON public.gloobe_tools;
+CREATE POLICY "gloobe_tools_all" ON public.gloobe_tools FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "gloobe_settings_all" ON public.gloobe_settings;
+CREATE POLICY "gloobe_settings_all" ON public.gloobe_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- Safety copy of the old single-row data (only created once, only if the old table exists)
+DO $$
+BEGIN
+  IF to_regclass('public.gloobe_manual_state') IS NOT NULL
+     AND to_regclass('public.gloobe_manual_state_backup') IS NULL THEN
+    EXECUTE 'CREATE TABLE public.gloobe_manual_state_backup AS SELECT *, now() AS backed_up_at FROM public.gloobe_manual_state';
+  END IF;
+END $$;
+
+-- -------------------------------------------------------------------------
 -- 4. Storage setup. Run this in the SQL Editor once, then keep the bucket
 --    public so the URLs returned by getPublicUrl work for every visitor.
 -- -------------------------------------------------------------------------

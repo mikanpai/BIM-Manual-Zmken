@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   CategoryInfo, CompanySettings, Language, PreviewBoxItem, 
   RibbonCategoryId, SubOptionItem, ToolItem 
@@ -21,7 +21,13 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
 import { ImageLightboxModal } from './components/ImageLightboxModal';
 import { Plus, Search, Sparkles, Building2, HelpCircle } from 'lucide-react';
-import { loadSharedManualState, saveSharedManualState } from './lib/supabase';
+import { loadSharedManualState } from './lib/supabase';
+import {
+  EMPTY_SNAPSHOT, ManualSnapshot, fetchManual, isCloudConfigured, pushChanges, snapshotsEqual,
+} from './lib/cloudStore';
+
+type SyncState = { status: 'loading' | 'saved' | 'saving' | 'error' | 'local'; message?: string };
+const STORAGE_KEY_LOCAL_BACKUP = 'gloobe_local_backup_v1';
 
 const STORAGE_KEY_TOOLS = 'gloobe_manual_tools_v1';
 const STORAGE_KEY_COMPANY = 'gloobe_manual_company_v1';
@@ -129,37 +135,172 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY_LANG, lang);
   }, [lang]);
 
-  // Load the shared manual after the local fallback is ready. A configured
-  // Supabase project becomes the source of truth for every browser/device.
-  useEffect(() => {
-    let cancelled = false;
-    loadSharedManualState().then(({ state, available }) => {
-      if (cancelled) return;
-      const sharedCategories = state?.categories && Array.isArray(state.categories)
-        ? state.categories as CategoryInfo[]
-        : categories;
-      if (state?.categories && Array.isArray(state.categories)) setCategories(sharedCategories);
-      if (state?.companySettings) setCompanySettings(state.companySettings as CompanySettings);
-      setTools(keepToolsInCategories(
-        state?.tools && Array.isArray(state.tools) ? state.tools as ToolItem[] : tools,
-        sharedCategories,
-      ));
-      setSharedStateAvailable(available);
-      setSharedStateReady(true);
+  // ---------------------------------------------------------------------
+  // Cloud sync (row-per-item). See src/lib/cloudStore.ts
+  // ---------------------------------------------------------------------
+  const [syncState, setSyncState] = useState<SyncState>({ status: 'loading' });
+  const latestRef = useRef<ManualSnapshot>({ categories, tools, company: companySettings });
+  latestRef.current = { categories, tools, company: companySettings };
+  const lastSyncedRef = useRef<ManualSnapshot | null>(null);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const uiBusyRef = useRef(false);
+  uiBusyRef.current = isEditorOpen || isAdminModalOpen || isCompanyModalOpen;
+
+  // Apply a cloud snapshot to the screen and remember it as "synced".
+  const applySnapshot = useCallback((remote: ManualSnapshot) => {
+    const nextCategories = remote.categories.length > 0 ? remote.categories : latestRef.current.categories;
+    const nextTools = keepToolsInCategories(remote.tools, nextCategories);
+    setCategories(nextCategories);
+    setTools(nextTools);
+    if (remote.company) setCompanySettings(remote.company);
+    lastSyncedRef.current = { categories: nextCategories, tools: nextTools, company: remote.company };
+    // keep an open detail page pointing at the fresh data
+    setSelectedTool((prev) => (prev ? nextTools.find((t) => t.id === prev.id) ?? prev : prev));
+    setSelectedSubOption((prev) => {
+      if (!prev) return prev;
+      const tool = nextTools.find((t) => t.id === prev.tool.id);
+      if (!tool) return prev;
+      return { tool, subOption: tool.subOptions?.find((s) => s.id === prev.subOption.id) ?? prev.subOption };
     });
-    return () => { cancelled = true; };
   }, []);
 
-  // Debounce cloud saves to avoid one write for every keystroke in an editor.
+  // Before the cloud version replaces what this browser has, keep a copy of the
+  // browser's own data so nothing can be silently lost.
+  const backupLocalIfDifferent = (remote: ManualSnapshot) => {
+    try {
+      const local = latestRef.current;
+      if (JSON.stringify(local.tools) === JSON.stringify(remote.tools)) return;
+      localStorage.setItem(STORAGE_KEY_LOCAL_BACKUP, JSON.stringify({
+        savedAt: new Date().toISOString(),
+        categories: local.categories,
+        tools: local.tools,
+        companySettings: local.company,
+      }));
+    } catch { /* storage full or unavailable */ }
+  };
+
+  // Initial load (and one-time migration from the old single-row table)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isCloudConfigured()) {
+        setSyncState({ status: 'local' });
+        setSharedStateReady(true);
+        return;
+      }
+      const res = await fetchManual();
+      if (cancelled) return;
+      if (!res.ok) {
+        setSyncState({ status: 'error', message: res.error });
+        setSharedStateAvailable(false);
+        setSharedStateReady(true);
+        return;
+      }
+      let remote = res.snapshot;
+      if (res.empty) {
+        // First run on the new tables: fill them from the old shared row, else from this browser.
+        const legacy = await loadSharedManualState();
+        if (cancelled) return;
+        const old = legacy.state;
+        const local = latestRef.current;
+        remote = {
+          categories: Array.isArray(old?.categories) ? (old!.categories as CategoryInfo[]) : local.categories,
+          tools: Array.isArray(old?.tools) ? (old!.tools as ToolItem[]) : local.tools,
+          company: (old?.companySettings as CompanySettings | undefined) ?? local.company,
+        };
+        // Keep custom tools that exist only in this browser (never re-add deleted built-in defaults).
+        if (Array.isArray(old?.tools)) {
+          const knownIds = new Set(remote.tools.map((t) => t.id));
+          const defaultIds = new Set(INITIAL_TOOLS.map((t) => t.id));
+          remote.tools = [
+            ...remote.tools,
+            ...local.tools.filter((t) => !knownIds.has(t.id) && !defaultIds.has(t.id)),
+          ];
+        }
+        backupLocalIfDifferent(remote);
+        try {
+          await pushChanges(EMPTY_SNAPSHOT, remote);
+        } catch (error) {
+          setSyncState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+          setSharedStateAvailable(false);
+          setSharedStateReady(true);
+          return;
+        }
+      } else {
+        backupLocalIfDifferent(remote);
+      }
+      if (cancelled) return;
+      applySnapshot(remote);
+      setSyncState({ status: 'saved' });
+      setSharedStateAvailable(true);
+      setSharedStateReady(true);
+    })();
+    return () => { cancelled = true; };
+  }, [applySnapshot]);
+
+  // Send only what changed since the last successful sync (one save at a time).
+  const flushSync = useCallback(() => {
+    queueRef.current = queueRef.current.then(async () => {
+      const prev = lastSyncedRef.current;
+      const next = latestRef.current;
+      if (!prev || snapshotsEqual(prev, next)) return;
+      setSyncState({ status: 'saving' });
+      try {
+        await pushChanges(prev, next);
+        lastSyncedRef.current = next;
+        setSyncState({ status: snapshotsEqual(next, latestRef.current) ? 'saved' : 'saving' });
+      } catch (error) {
+        console.warn('[Supabase] Sync failed:', error);
+        setSyncState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+      }
+    });
+  }, []);
+
   useEffect(() => {
     if (!sharedStateReady || !sharedStateAvailable) return;
-    const timeout = window.setTimeout(() => {
-      saveSharedManualState({ categories, companySettings, tools }).catch((error) => {
-        console.warn('[Supabase] Shared manual sync failed:', error);
-      });
-    }, 750);
+    const timeout = window.setTimeout(flushSync, 750);
     return () => window.clearTimeout(timeout);
-  }, [categories, companySettings, sharedStateAvailable, sharedStateReady, tools]);
+  }, [categories, companySettings, tools, sharedStateAvailable, sharedStateReady, flushSync]);
+
+  // Pull in changes other people made (only when this browser has nothing unsaved).
+  const refreshFromCloud = useCallback(async () => {
+    const last = lastSyncedRef.current;
+    if (!last || uiBusyRef.current || !snapshotsEqual(last, latestRef.current)) return;
+    const res = await fetchManual();
+    if (!res.ok || res.empty) return;
+    const current = lastSyncedRef.current;
+    if (!current || uiBusyRef.current || !snapshotsEqual(current, latestRef.current)) return;
+    const remoteTools = keepToolsInCategories(res.snapshot.tools, res.snapshot.categories);
+    const remote: ManualSnapshot = { ...res.snapshot, tools: remoteTools, company: res.snapshot.company ?? current.company };
+    if (snapshotsEqual({ ...current, company: current.company }, remote)) return;
+    applySnapshot(res.snapshot);
+  }, [applySnapshot]);
+
+  useEffect(() => {
+    if (!sharedStateReady || !sharedStateAvailable) return;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushSync();
+      else refreshFromCloud();
+    };
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      const last = lastSyncedRef.current;
+      if (last && !snapshotsEqual(last, latestRef.current)) {
+        flushSync();
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', refreshFromCloud);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    const interval = window.setInterval(refreshFromCloud, 45000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', refreshFromCloud);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.clearInterval(interval);
+    };
+  }, [sharedStateReady, sharedStateAvailable, flushSync, refreshFromCloud]);
 
   // Never keep a deleted/default ribbon category selected after local or cloud state loads.
   useEffect(() => {
@@ -538,6 +679,37 @@ export default function App() {
         isGif={lightboxData.isGif}
         lang={lang}
       />
+
+      {/* Cloud save status (so a failed save is never silent) */}
+      {syncState.status !== 'loading' && (
+        <div
+          className={`fixed bottom-3 left-3 z-40 flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold shadow-md ${
+            syncState.status === 'error'
+              ? 'bg-red-50 border-red-300 text-red-700'
+              : syncState.status === 'saving'
+              ? 'bg-amber-50 border-amber-300 text-amber-800'
+              : syncState.status === 'local'
+              ? 'bg-stone-100 border-stone-300 text-stone-600'
+              : 'bg-emerald-50 border-emerald-300 text-emerald-700'
+          }`}
+          title={syncState.message || ''}
+        >
+          <span>
+            {syncState.status === 'saved' && (lang === 'ja' ? '☁ クラウド保存済み' : '☁ Saved to cloud')}
+            {syncState.status === 'saving' && (lang === 'ja' ? '☁ 保存中…' : '☁ Saving…')}
+            {syncState.status === 'local' && (lang === 'ja' ? 'このブラウザのみに保存（Supabase未接続）' : 'Saved in this browser only (Supabase not connected)')}
+            {syncState.status === 'error' && (lang === 'ja' ? '⚠ クラウド保存に失敗しました' : '⚠ Cloud save failed')}
+          </span>
+          {syncState.status === 'error' && (
+            <>
+              <span className="max-w-[260px] truncate font-normal">{syncState.message}</span>
+              <button type="button" onClick={flushSync} className="rounded bg-red-600 px-2 py-0.5 text-white hover:bg-red-700">
+                {lang === 'ja' ? '再試行' : 'Retry'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
     </div>
   );

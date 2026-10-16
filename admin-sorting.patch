@@ -1,0 +1,1334 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index e4ad3a5..cd09318 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import React, { useState, useEffect } from 'react';
++import React, { useState, useEffect, useRef, useCallback } from 'react';
+ import { 
+   CategoryInfo, CompanySettings, Language, PreviewBoxItem, 
+   RibbonCategoryId, SubOptionItem, ToolItem 
+@@ -21,7 +21,13 @@ import { AdminPanelModal } from './components/AdminPanelModal';
+ import { CompanySettingsModal } from './components/CompanySettingsModal';
+ import { ImageLightboxModal } from './components/ImageLightboxModal';
+ import { Plus, Search, Sparkles, Building2, HelpCircle } from 'lucide-react';
+-import { loadSharedManualState, saveSharedManualState } from './lib/supabase';
++import { loadSharedManualState } from './lib/supabase';
++import {
++  EMPTY_SNAPSHOT, ManualSnapshot, fetchManual, isCloudConfigured, pushChanges, snapshotsEqual,
++} from './lib/cloudStore';
++
++type SyncState = { status: 'loading' | 'saved' | 'saving' | 'error' | 'local'; message?: string };
++const STORAGE_KEY_LOCAL_BACKUP = 'gloobe_local_backup_v1';
+ 
+ const STORAGE_KEY_TOOLS = 'gloobe_manual_tools_v1';
+ const STORAGE_KEY_COMPANY = 'gloobe_manual_company_v1';
+@@ -129,37 +135,172 @@ export default function App() {
+     localStorage.setItem(STORAGE_KEY_LANG, lang);
+   }, [lang]);
+ 
+-  // Load the shared manual after the local fallback is ready. A configured
+-  // Supabase project becomes the source of truth for every browser/device.
++  // ---------------------------------------------------------------------
++  // Cloud sync (row-per-item). See src/lib/cloudStore.ts
++  // ---------------------------------------------------------------------
++  const [syncState, setSyncState] = useState<SyncState>({ status: 'loading' });
++  const latestRef = useRef<ManualSnapshot>({ categories, tools, company: companySettings });
++  latestRef.current = { categories, tools, company: companySettings };
++  const lastSyncedRef = useRef<ManualSnapshot | null>(null);
++  const queueRef = useRef<Promise<void>>(Promise.resolve());
++  const uiBusyRef = useRef(false);
++  uiBusyRef.current = isEditorOpen || isAdminModalOpen || isCompanyModalOpen;
++
++  // Apply a cloud snapshot to the screen and remember it as "synced".
++  const applySnapshot = useCallback((remote: ManualSnapshot) => {
++    const nextCategories = remote.categories.length > 0 ? remote.categories : latestRef.current.categories;
++    const nextTools = keepToolsInCategories(remote.tools, nextCategories);
++    setCategories(nextCategories);
++    setTools(nextTools);
++    if (remote.company) setCompanySettings(remote.company);
++    lastSyncedRef.current = { categories: nextCategories, tools: nextTools, company: remote.company };
++    // keep an open detail page pointing at the fresh data
++    setSelectedTool((prev) => (prev ? nextTools.find((t) => t.id === prev.id) ?? prev : prev));
++    setSelectedSubOption((prev) => {
++      if (!prev) return prev;
++      const tool = nextTools.find((t) => t.id === prev.tool.id);
++      if (!tool) return prev;
++      return { tool, subOption: tool.subOptions?.find((s) => s.id === prev.subOption.id) ?? prev.subOption };
++    });
++  }, []);
++
++  // Before the cloud version replaces what this browser has, keep a copy of the
++  // browser's own data so nothing can be silently lost.
++  const backupLocalIfDifferent = (remote: ManualSnapshot) => {
++    try {
++      const local = latestRef.current;
++      if (JSON.stringify(local.tools) === JSON.stringify(remote.tools)) return;
++      localStorage.setItem(STORAGE_KEY_LOCAL_BACKUP, JSON.stringify({
++        savedAt: new Date().toISOString(),
++        categories: local.categories,
++        tools: local.tools,
++        companySettings: local.company,
++      }));
++    } catch { /* storage full or unavailable */ }
++  };
++
++  // Initial load (and one-time migration from the old single-row table)
+   useEffect(() => {
+     let cancelled = false;
+-    loadSharedManualState().then(({ state, available }) => {
++    (async () => {
++      if (!isCloudConfigured()) {
++        setSyncState({ status: 'local' });
++        setSharedStateReady(true);
++        return;
++      }
++      const res = await fetchManual();
+       if (cancelled) return;
+-      const sharedCategories = state?.categories && Array.isArray(state.categories)
+-        ? state.categories as CategoryInfo[]
+-        : categories;
+-      if (state?.categories && Array.isArray(state.categories)) setCategories(sharedCategories);
+-      if (state?.companySettings) setCompanySettings(state.companySettings as CompanySettings);
+-      setTools(keepToolsInCategories(
+-        state?.tools && Array.isArray(state.tools) ? state.tools as ToolItem[] : tools,
+-        sharedCategories,
+-      ));
+-      setSharedStateAvailable(available);
++      if (!res.ok) {
++        setSyncState({ status: 'error', message: res.error });
++        setSharedStateAvailable(false);
++        setSharedStateReady(true);
++        return;
++      }
++      let remote = res.snapshot;
++      if (res.empty) {
++        // First run on the new tables: fill them from the old shared row, else from this browser.
++        const legacy = await loadSharedManualState();
++        if (cancelled) return;
++        const old = legacy.state;
++        const local = latestRef.current;
++        remote = {
++          categories: Array.isArray(old?.categories) ? (old!.categories as CategoryInfo[]) : local.categories,
++          tools: Array.isArray(old?.tools) ? (old!.tools as ToolItem[]) : local.tools,
++          company: (old?.companySettings as CompanySettings | undefined) ?? local.company,
++        };
++        // Keep custom tools that exist only in this browser (never re-add deleted built-in defaults).
++        if (Array.isArray(old?.tools)) {
++          const knownIds = new Set(remote.tools.map((t) => t.id));
++          const defaultIds = new Set(INITIAL_TOOLS.map((t) => t.id));
++          remote.tools = [
++            ...remote.tools,
++            ...local.tools.filter((t) => !knownIds.has(t.id) && !defaultIds.has(t.id)),
++          ];
++        }
++        backupLocalIfDifferent(remote);
++        try {
++          await pushChanges(EMPTY_SNAPSHOT, remote);
++        } catch (error) {
++          setSyncState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
++          setSharedStateAvailable(false);
++          setSharedStateReady(true);
++          return;
++        }
++      } else {
++        backupLocalIfDifferent(remote);
++      }
++      if (cancelled) return;
++      applySnapshot(remote);
++      setSyncState({ status: 'saved' });
++      setSharedStateAvailable(true);
+       setSharedStateReady(true);
+-    });
++    })();
+     return () => { cancelled = true; };
++  }, [applySnapshot]);
++
++  // Send only what changed since the last successful sync (one save at a time).
++  const flushSync = useCallback(() => {
++    queueRef.current = queueRef.current.then(async () => {
++      const prev = lastSyncedRef.current;
++      const next = latestRef.current;
++      if (!prev || snapshotsEqual(prev, next)) return;
++      setSyncState({ status: 'saving' });
++      try {
++        await pushChanges(prev, next);
++        lastSyncedRef.current = next;
++        setSyncState({ status: snapshotsEqual(next, latestRef.current) ? 'saved' : 'saving' });
++      } catch (error) {
++        console.warn('[Supabase] Sync failed:', error);
++        setSyncState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
++      }
++    });
+   }, []);
+ 
+-  // Debounce cloud saves to avoid one write for every keystroke in an editor.
+   useEffect(() => {
+     if (!sharedStateReady || !sharedStateAvailable) return;
+-    const timeout = window.setTimeout(() => {
+-      saveSharedManualState({ categories, companySettings, tools }).catch((error) => {
+-        console.warn('[Supabase] Shared manual sync failed:', error);
+-      });
+-    }, 750);
++    const timeout = window.setTimeout(flushSync, 750);
+     return () => window.clearTimeout(timeout);
+-  }, [categories, companySettings, sharedStateAvailable, sharedStateReady, tools]);
++  }, [categories, companySettings, tools, sharedStateAvailable, sharedStateReady, flushSync]);
++
++  // Pull in changes other people made (only when this browser has nothing unsaved).
++  const refreshFromCloud = useCallback(async () => {
++    const last = lastSyncedRef.current;
++    if (!last || uiBusyRef.current || !snapshotsEqual(last, latestRef.current)) return;
++    const res = await fetchManual();
++    if (!res.ok || res.empty) return;
++    const current = lastSyncedRef.current;
++    if (!current || uiBusyRef.current || !snapshotsEqual(current, latestRef.current)) return;
++    const remoteTools = keepToolsInCategories(res.snapshot.tools, res.snapshot.categories);
++    const remote: ManualSnapshot = { ...res.snapshot, tools: remoteTools, company: res.snapshot.company ?? current.company };
++    if (snapshotsEqual({ ...current, company: current.company }, remote)) return;
++    applySnapshot(res.snapshot);
++  }, [applySnapshot]);
++
++  useEffect(() => {
++    if (!sharedStateReady || !sharedStateAvailable) return;
++    const onVisibility = () => {
++      if (document.visibilityState === 'hidden') flushSync();
++      else refreshFromCloud();
++    };
++    const onBeforeUnload = (event: BeforeUnloadEvent) => {
++      const last = lastSyncedRef.current;
++      if (last && !snapshotsEqual(last, latestRef.current)) {
++        flushSync();
++        event.preventDefault();
++        event.returnValue = '';
++      }
++    };
++    document.addEventListener('visibilitychange', onVisibility);
++    window.addEventListener('focus', refreshFromCloud);
++    window.addEventListener('beforeunload', onBeforeUnload);
++    const interval = window.setInterval(refreshFromCloud, 45000);
++    return () => {
++      document.removeEventListener('visibilitychange', onVisibility);
++      window.removeEventListener('focus', refreshFromCloud);
++      window.removeEventListener('beforeunload', onBeforeUnload);
++      window.clearInterval(interval);
++    };
++  }, [sharedStateReady, sharedStateAvailable, flushSync, refreshFromCloud]);
+ 
+   // Never keep a deleted/default ribbon category selected after local or cloud state loads.
+   useEffect(() => {
+@@ -488,6 +629,7 @@ export default function App() {
+           onClose={() => setIsEditorOpen(false)}
+           tool={editingTool}
+           categories={categories}
++          allTools={tools}
+           defaultCategoryId={activeRibbonCategory}
+           onSave={handleSaveTool}
+           lang={lang}
+@@ -538,6 +680,37 @@ export default function App() {
+         lang={lang}
+       />
+ 
++      {/* Cloud save status (so a failed save is never silent) */}
++      {syncState.status !== 'loading' && (
++        <div
++          className={`fixed bottom-3 left-3 z-40 flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold shadow-md ${
++            syncState.status === 'error'
++              ? 'bg-red-50 border-red-300 text-red-700'
++              : syncState.status === 'saving'
++              ? 'bg-amber-50 border-amber-300 text-amber-800'
++              : syncState.status === 'local'
++              ? 'bg-stone-100 border-stone-300 text-stone-600'
++              : 'bg-emerald-50 border-emerald-300 text-emerald-700'
++          }`}
++          title={syncState.message || ''}
++        >
++          <span>
++            {syncState.status === 'saved' && (lang === 'ja' ? '☁ クラウド保存済み' : '☁ Saved to cloud')}
++            {syncState.status === 'saving' && (lang === 'ja' ? '☁ 保存中…' : '☁ Saving…')}
++            {syncState.status === 'local' && (lang === 'ja' ? 'このブラウザのみに保存（Supabase未接続）' : 'Saved in this browser only (Supabase not connected)')}
++            {syncState.status === 'error' && (lang === 'ja' ? '⚠ クラウド保存に失敗しました' : '⚠ Cloud save failed')}
++          </span>
++          {syncState.status === 'error' && (
++            <>
++              <span className="max-w-[260px] truncate font-normal">{syncState.message}</span>
++              <button type="button" onClick={flushSync} className="rounded bg-red-600 px-2 py-0.5 text-white hover:bg-red-700">
++                {lang === 'ja' ? '再試行' : 'Retry'}
++              </button>
++            </>
++          )}
++        </div>
++      )}
++
+     </div>
+   );
+ }
+diff --git a/src/components/AdminPanelModal.tsx b/src/components/AdminPanelModal.tsx
+index 73ee5f7..e064479 100644
+--- a/src/components/AdminPanelModal.tsx
++++ b/src/components/AdminPanelModal.tsx
+@@ -575,6 +575,77 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+ 
+   const standaloneTools = categoryTools.filter((t) => !t.dropdownGroup);
+ 
++  // ---- Display ORDER controls -------------------------------------------
++  // The ribbon renders tools in the order of the `tools` array (no automatic
++  // sorting), so changing the order here = changing the array order.
++
++  // Swap a tool with the previous/next tool that belongs to the same "peer" set
++  const moveToolBy = (toolId: string, direction: -1 | 1, isPeer: (t: ToolItem) => boolean) => {
++    setLocalTools((prev) => {
++      const from = prev.findIndex((t) => t.id === toolId);
++      if (from < 0) return prev;
++      let to = from + direction;
++      while (to >= 0 && to < prev.length && !isPeer(prev[to])) to += direction;
++      if (to < 0 || to >= prev.length) return prev;
++      const next = [...prev];
++      [next[from], next[to]] = [next[to], next[from]];
++      return next;
++    });
++  };
++
++  // Move a ribbon group (柱ツール, 梁ツール ...) left/right inside the selected category
++  const moveGroupBy = (groupKey: string, direction: -1 | 1) => {
++    setLocalTools((prev) => {
++      const inCat = prev.filter((t) => t.categoryId === selectedCatId);
++      const keys = Array.from(new Set(inCat.map((t) => t.subgroup.ja)));
++      const idx = keys.indexOf(groupKey);
++      const target = idx + direction;
++      if (idx < 0 || target < 0 || target >= keys.length) return prev;
++      [keys[idx], keys[target]] = [keys[target], keys[idx]];
++      const reordered = keys.flatMap((k) => inCat.filter((t) => t.subgroup.ja === k));
++      let i = 0;
++      return prev.map((t) => (t.categoryId === selectedCatId ? reordered[i++] : t));
++    });
++  };
++
++  // Move a whole dropdown button left/right (its tools keep their inner order)
++  const moveDropdownGroupBy = (gId: string, direction: -1 | 1) => {
++    setLocalTools((prev) => {
++      const inCat = prev.filter((t) => t.categoryId === selectedCatId && t.dropdownGroup);
++      const ids = Array.from(new Set(inCat.map((t) => t.dropdownGroup as string)));
++      const idx = ids.indexOf(gId);
++      const target = idx + direction;
++      if (idx < 0 || target < 0 || target >= ids.length) return prev;
++      [ids[idx], ids[target]] = [ids[target], ids[idx]];
++      const reordered = ids.flatMap((id) => inCat.filter((t) => t.dropdownGroup === id));
++      let i = 0;
++      return prev.map((t) => (t.categoryId === selectedCatId && t.dropdownGroup ? reordered[i++] : t));
++    });
++  };
++
++  const renderOrderButtons = (onUp: () => void, onDown: () => void, canUp: boolean, canDown: boolean) => (
++    <div className="flex items-center gap-0.5 shrink-0">
++      <button
++        type="button"
++        onClick={onUp}
++        disabled={!canUp}
++        className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
++        title={lang === 'ja' ? '前へ移動（左/上）' : 'Move earlier (left/up)'}
++      >
++        <ArrowUp className="w-3 h-3" />
++      </button>
++      <button
++        type="button"
++        onClick={onDown}
++        disabled={!canDown}
++        className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
++        title={lang === 'ja' ? '後ろへ移動（右/下）' : 'Move later (right/down)'}
++      >
++        <ArrowDown className="w-3 h-3" />
++      </button>
++    </div>
++  );
++
+   // Tab definitions 1 to 7 for quick direct navigation
+   const ADMIN_TABS = [
+     {
+@@ -1061,7 +1132,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+               {/* List of Groupings in Selected Category */}
+               <div className="space-y-4">
+                 {Object.keys(categoryGroups).length > 0 ? (
+-                  Object.entries(categoryGroups).map(([groupKey, groupObj]) => {
++                  Object.entries(categoryGroups).map(([groupKey, groupObj], gIdx, gArr) => {
+                     const gTools = groupObj.tools;
+                     const isEditingThis = editingGroupJa === groupKey;
+ 
+@@ -1128,6 +1199,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+                           )}
+ 
+                           <div className="flex items-center gap-2">
++                            {!isEditingThis && renderOrderButtons(
++                              () => moveGroupBy(groupKey, -1),
++                              () => moveGroupBy(groupKey, 1),
++                              gIdx > 0,
++                              gIdx < gArr.length - 1
++                            )}
+                             {!isEditingThis && (
+                               <button
+                                 type="button"
+@@ -1156,7 +1233,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+ 
+                         {/* Tools in this Group */}
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+-                          {gTools.map((t) => (
++                          {gTools.map((t, tIdx) => (
+                             <div
+                               key={t.id}
+                               className="p-2.5 rounded-xl bg-white border border-stone-200 flex items-center justify-between gap-2 shadow-2xs"
+@@ -1177,6 +1254,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+                                 </div>
+                               </div>
+ 
++                              {renderOrderButtons(
++                                () => moveToolBy(t.id, -1, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey),
++                                () => moveToolBy(t.id, 1, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey),
++                                tIdx > 0,
++                                tIdx < gTools.length - 1
++                              )}
++
+                               {/* Move tool to another group selector */}
+                               <select
+                                 value={t.subgroup.ja}
+@@ -1307,7 +1391,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+                 </div>
+ 
+                 {dropdownGroupIds.length > 0 ? (
+-                  dropdownGroupIds.map((gId) => {
++                  dropdownGroupIds.map((gId, dgIdx) => {
+                     const groupTools = categoryTools.filter((t) => t.dropdownGroup === gId);
+                     const trigger = groupTools.find((t) => t.isDropdownTrigger) || groupTools[0];
+                     const gNameJa = trigger?.dropdownGroupName?.ja || gId;
+@@ -1343,6 +1427,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+                           </div>
+ 
+                           <div className="flex items-center gap-2">
++                            {renderOrderButtons(
++                              () => moveDropdownGroupBy(gId, -1),
++                              () => moveDropdownGroupBy(gId, 1),
++                              dgIdx > 0,
++                              dgIdx < dropdownGroupIds.length - 1
++                            )}
+                             {/* USER REQUESTED: Edit icon and label for dropdown button group */}
+                             <button
+                               type="button"
+@@ -1555,6 +1645,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+                                   </span>
+                                 )}
+ 
++                                {renderOrderButtons(
++                                  () => moveToolBy(gt.id, -1, (x) => x.dropdownGroup === gId),
++                                  () => moveToolBy(gt.id, 1, (x) => x.dropdownGroup === gId),
++                                  idx > 0,
++                                  idx < groupTools.length - 1
++                                )}
++
+                                 {!gt.isDropdownTrigger && (
+                                   <button
+                                     type="button"
+@@ -1602,7 +1699,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+                 </div>
+ 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+-                  {standaloneTools.map((st) => (
++                  {standaloneTools.map((st, sIdx) => (
+                     <div
+                       key={st.id}
+                       className="p-3.5 rounded-xl border border-stone-200 bg-white hover:border-orange-300 flex items-center justify-between gap-3 shadow-2xs transition"
+@@ -1628,6 +1725,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
+                           </span>
+                         )}
+ 
++                        {renderOrderButtons(
++                          () => moveToolBy(st.id, -1, (x) => x.categoryId === selectedCatId && !x.dropdownGroup),
++                          () => moveToolBy(st.id, 1, (x) => x.categoryId === selectedCatId && !x.dropdownGroup),
++                          sIdx > 0,
++                          sIdx < standaloneTools.length - 1
++                        )}
++
+                         {/* Move into existing or new dropdown */}
+                         {dropdownGroupIds.length > 0 ? (
+                           <select
+diff --git a/src/components/InteractiveCadCanvas.tsx b/src/components/InteractiveCadCanvas.tsx
+index a6b41c0..9ae8428 100644
+--- a/src/components/InteractiveCadCanvas.tsx
++++ b/src/components/InteractiveCadCanvas.tsx
+@@ -119,16 +119,6 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
+   };
+ 
+   // Media navigation
+-  const handlePrevMedia = () => {
+-    if (consolidatedMedia.length <= 1) return;
+-    setActiveMediaIndex((prev) => (prev > 0 ? prev - 1 : consolidatedMedia.length - 1));
+-  };
+-
+-  const handleNextMedia = () => {
+-    if (consolidatedMedia.length <= 1) return;
+-    setActiveMediaIndex((prev) => (prev < consolidatedMedia.length - 1 ? prev + 1 : 0));
+-  };
+-
+   // Current active step information
+   const activeStep = steps[currentStepIndex];
+ 
+@@ -360,59 +350,6 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
+         </div>
+       </div>
+ 
+-      {/* Multiple Media Tabs / Pills Selector (for 2, 3, or more GIFs / WebM videos) */}
+-      {consolidatedMedia.length > 1 && (
+-        <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-orange-50/80 border border-orange-200">
+-          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+-            <span className="text-[10px] font-bold text-orange-900 px-1 shrink-0 flex items-center gap-1">
+-              <Film className="w-3 h-3 text-orange-600" />
+-              <span>{lang === 'ja' ? 'メディア切替:' : 'Media:'}</span>
+-            </span>
+-            {consolidatedMedia.map((m, idx) => {
+-              const isSelected = activeMediaIndex === idx;
+-              const isVid = m.type === 'webm' || m.type === 'video' || m.url.includes('.webm') || m.url.includes('.mp4');
+-              const isWebp = m.type === 'webp' || m.url.toLowerCase().includes('.webp');
+-              const title = m.title ? (lang === 'ja' ? m.title.ja : m.title.en) : (isVid ? `WebM ${idx + 1}` : (isWebp ? `WebP ${idx + 1}` : `GIF ${idx + 1}`));
+-
+-              return (
+-                <button
+-                  key={m.id || idx}
+-                  onClick={() => setActiveMediaIndex(idx)}
+-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer shadow-2xs ${
+-                    isSelected
+-                      ? 'bg-orange-600 text-white shadow-xs scale-102 ring-1 ring-orange-400'
+-                      : 'bg-white border border-stone-200 text-stone-700 hover:bg-orange-100/60 hover:text-orange-900'
+-                  }`}
+-                >
+-                  {isVid ? <Video className="w-3 h-3" /> : (isWebp ? <ImageIcon className="w-3 h-3" /> : <Film className="w-3 h-3" />)}
+-                  <span>{title}</span>
+-                  <span className={`text-[9px] px-1 py-0.2 rounded ${isSelected ? 'bg-orange-700 text-white' : 'bg-stone-100 text-stone-500'}`}>
+-                    {idx + 1}/{consolidatedMedia.length}
+-                  </span>
+-                </button>
+-              );
+-            })}
+-          </div>
+-
+-          <div className="flex items-center gap-1 shrink-0">
+-            <button
+-              onClick={handlePrevMedia}
+-              className="p-1 rounded-lg bg-white border border-stone-200 hover:border-orange-400 text-stone-600 hover:text-orange-600 text-xs transition shadow-2xs cursor-pointer"
+-              title={lang === 'ja' ? '前のGIF/動画' : 'Previous Media'}
+-            >
+-              <ChevronLeft className="w-3.5 h-3.5" />
+-            </button>
+-            <button
+-              onClick={handleNextMedia}
+-              className="p-1 rounded-lg bg-white border border-stone-200 hover:border-orange-400 text-stone-600 hover:text-orange-600 text-xs transition shadow-2xs cursor-pointer"
+-              title={lang === 'ja' ? '次のGIF/動画' : 'Next Media'}
+-            >
+-              <ChevronRight className="w-3.5 h-3.5" />
+-            </button>
+-          </div>
+-        </div>
+-      )}
+-
+       {/* Media Canvas Stage (Shows GIF Demo, WebM Video, or Fallback) */}
+       <div className="group/stage relative aspect-[16/10] sm:aspect-[16/9] max-h-[340px] w-full rounded-xl overflow-hidden bg-stone-100 flex items-center justify-center border border-stone-200 shadow-2xs">
+         {activeMediaUrl ? (
+@@ -470,26 +407,6 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
+               <span>{lang === 'ja' ? '拡大' : 'Enlarge'}</span>
+             </button>
+ 
+-            {/* Floating Left/Right Arrows on hover when multiple media */}
+-            {consolidatedMedia.length > 1 && (
+-              <>
+-                <button
+-                  onClick={handlePrevMedia}
+-                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-orange-600 text-white transition opacity-0 group-hover/stage:opacity-100 shadow-md cursor-pointer"
+-                  title="Previous"
+-                >
+-                  <ChevronLeft className="w-4 h-4" />
+-                </button>
+-                <button
+-                  onClick={handleNextMedia}
+-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-orange-600 text-white transition opacity-0 group-hover/stage:opacity-100 shadow-md cursor-pointer"
+-                  title="Next"
+-                >
+-                  <ChevronRight className="w-4 h-4" />
+-                </button>
+-              </>
+-            )}
+-
+             {/* Media Caption / Title Overlay Bar */}
+             {currentMedia?.title && (
+               <div className="absolute bottom-2 left-2 right-2 px-3 py-1.5 rounded-lg bg-black/70 backdrop-blur-xs text-white text-xs flex items-center justify-between pointer-events-none">
+diff --git a/src/components/SubOptionDetailPage.tsx b/src/components/SubOptionDetailPage.tsx
+index dc11baf..48d8e5f 100644
+--- a/src/components/SubOptionDetailPage.tsx
++++ b/src/components/SubOptionDetailPage.tsx
+@@ -4,7 +4,7 @@ import { CadIcon } from './CadIcon';
+ import { InteractiveCadCanvas } from './InteractiveCadCanvas';
+ import { 
+   ArrowLeft, ArrowRight, ChevronRight, Edit3, Printer, Share2, 
+-  CheckCircle2, Circle, HelpCircle, AlertTriangle, Film, 
++  HelpCircle, AlertTriangle, Film, 
+   Keyboard, Sparkles, Plus, Check, Layers
+ } from 'lucide-react';
+ import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
+@@ -35,7 +35,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
+   onSaveSubOption,
+   onSaveTool,
+ }) => {
+-  const [completedSteps, setCompletedSteps] = useState<{ [id: string]: boolean }>({});
+   const [copiedLink, setCopiedLink] = useState(false);
+ 
+   // Preview Box Editor State
+@@ -110,13 +109,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
+         }
+       ];
+ 
+-  const toggleStep = (stepId: string) => {
+-    setCompletedSteps((prev) => ({
+-      ...prev,
+-      [stepId]: !prev[stepId],
+-    }));
+-  };
+-
+   const handleCopyLink = () => {
+     navigator.clipboard.writeText(window.location.href);
+     setCopiedLink(true);
+@@ -391,67 +383,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
+             </div>
+           </div>
+ 
+-          {/* Section 3: Step-by-Step Instructions */}
+-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
+-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+-              <div className="flex items-center gap-2">
+-                <CheckCircle2 className="w-4 h-4 text-orange-600" />
+-                <h2 className="text-base font-bold text-stone-900">
+-                  {lang === 'ja' ? '操作手順ガイド (実務ステップ)' : 'Step-by-Step Operating Guide'}
+-                </h2>
+-              </div>
+-              <span className="text-xs text-stone-400">
+-                {lang === 'ja' ? '番号順にクリックして進めてください' : 'Follow steps in sequence'}
+-              </span>
+-            </div>
+-
+-            <div className="space-y-3">
+-              {steps.map((step) => {
+-                const isDone = !!completedSteps[step.id];
+-                return (
+-                  <div
+-                    key={step.id}
+-                    className={`p-4 rounded-xl border transition-all ${
+-                      isDone 
+-                        ? 'border-emerald-300 bg-emerald-50/40' 
+-                        : 'border-stone-200 hover:border-orange-300 bg-stone-50/50'
+-                    }`}
+-                  >
+-                    <div className="flex items-start justify-between gap-3">
+-                      <div className="flex items-start gap-3">
+-                        <button
+-                          type="button"
+-                          onClick={() => toggleStep(step.id)}
+-                          className="mt-0.5 shrink-0 text-stone-400 hover:text-emerald-600 transition"
+-                        >
+-                          {isDone ? (
+-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+-                          ) : (
+-                            <Circle className="w-5 h-5" />
+-                          )}
+-                        </button>
+-
+-                        <div className="space-y-1">
+-                          <div className="flex items-center gap-2">
+-                            <span className="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+-                              {step.stepNumber}
+-                            </span>
+-                            <h3 className={`text-sm font-bold ${isDone ? 'line-through text-stone-400' : 'text-stone-900'}`}>
+-                              {lang === 'ja' ? step.title.ja : step.title.en}
+-                            </h3>
+-                          </div>
+-
+-                          <p className="text-xs text-stone-600 leading-relaxed font-normal whitespace-pre-line pl-7">
+-                            {lang === 'ja' ? step.instruction.ja : step.instruction.en}
+-                          </p>
+-                        </div>
+-                      </div>
+-                    </div>
+-                  </div>
+-                );
+-              })}
+-            </div>
+-          </div>
+ 
+         </div>
+ 
+@@ -487,35 +418,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
+             </button>
+           </div>
+ 
+-          {/* Box 2: Trainee Practice Checklist */}
+-          <div className="bg-gradient-to-br from-orange-50 via-white to-amber-50/70 text-stone-800 rounded-2xl p-5 shadow-xs border border-orange-200/90 space-y-3">
+-            <h3 className="text-xs font-bold uppercase tracking-wider text-orange-800">
+-              {lang === 'ja' ? '社内研修 習熟度チェック' : 'Trainee Practice Status'}
+-            </h3>
+-            
+-            <div className="flex items-center justify-between text-xs">
+-              <span className="text-stone-600">{lang === 'ja' ? '完了ステップ数:' : 'Completed Steps:'}</span>
+-              <span className="font-extrabold text-orange-600 text-sm">
+-                {Object.values(completedSteps).filter(Boolean).length} / {steps.length}
+-              </span>
+-            </div>
+-
+-            {/* Progress bar */}
+-            <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
+-              <div
+-                className="h-full bg-orange-600 transition-all duration-300"
+-                style={{
+-                  width: `${(Object.values(completedSteps).filter(Boolean).length / steps.length) * 100}%`,
+-                }}
+-              />
+-            </div>
+-
+-            <p className="text-[11px] text-stone-600 leading-snug">
+-              {lang === 'ja'
+-                ? '手順に沿って実務練習を行い、チェックをつけて習熟を確認します。'
+-                : 'Follow the steps and check off items as you practice in GLOOBE.'}
+-            </p>
+-          </div>
+ 
+         </div>
+ 
+diff --git a/src/components/SubOptionEditorModal.tsx b/src/components/SubOptionEditorModal.tsx
+index a379bca..a8b01b9 100644
+--- a/src/components/SubOptionEditorModal.tsx
++++ b/src/components/SubOptionEditorModal.tsx
+@@ -125,17 +125,6 @@ export const SubOptionEditorModal: React.FC<SubOptionEditorModalProps> = ({
+     try { setMediaUrl(await uploadMediaFile(file, 'sub-option-media')); } catch (error) { alert(error instanceof Error ? error.message : 'Upload failed.'); }
+   };
+ 
+-  const handleStepChange = (index: number, field: 'titleJa' | 'titleEn' | 'instructionJa' | 'instructionEn', value: string) => {
+-    const updated = [...steps];
+-    const s = { ...updated[index] };
+-    if (field === 'titleJa') s.title = { ...s.title, ja: value };
+-    if (field === 'titleEn') s.title = { ...s.title, en: value };
+-    if (field === 'instructionJa') s.instruction = { ...s.instruction, ja: value };
+-    if (field === 'instructionEn') s.instruction = { ...s.instruction, en: value };
+-    updated[index] = s;
+-    setSteps(updated);
+-  };
+-
+   const handleSave = () => {
+     const updated: SubOptionItem = {
+       ...subOption,
+@@ -341,57 +330,6 @@ export const SubOptionEditorModal: React.FC<SubOptionEditorModalProps> = ({
+             </div>
+           </div>
+ 
+-          {/* 4 Steps for manual scrubber */}
+-          <div className="space-y-3">
+-            <div className="font-bold text-stone-900 text-xs">
+-              {lang === 'ja' ? '操作手順ステップ (1, 2, 3, 4)' : 'Operation Steps (1, 2, 3, 4)'}
+-            </div>
+-
+-            <div className="space-y-2">
+-              {steps.map((step, idx) => (
+-                <div key={step.id || idx} className="p-3 rounded-lg border border-stone-200 bg-stone-50 space-y-2">
+-                  <div className="flex items-center gap-2">
+-                    <span className="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+-                      {idx + 1}
+-                    </span>
+-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+-                      <input
+-                        type="text"
+-                        value={step.title.ja}
+-                        onChange={(e) => handleStepChange(idx, 'titleJa', e.target.value)}
+-                        placeholder={`ステップ ${idx + 1} タイトル (日本語)`}
+-                        className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white font-medium"
+-                      />
+-                      <input
+-                        type="text"
+-                        value={step.title.en}
+-                        onChange={(e) => handleStepChange(idx, 'titleEn', e.target.value)}
+-                        placeholder={`Step ${idx + 1} Title (English)`}
+-                        className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white font-medium"
+-                      />
+-                    </div>
+-                  </div>
+-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-7">
+-                    <textarea
+-                      rows={2}
+-                      value={step.instruction.ja}
+-                      onChange={(e) => handleStepChange(idx, 'instructionJa', e.target.value)}
+-                      placeholder={`ステップ ${idx + 1} の操作説明 (日本語)`}
+-                      className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white"
+-                    />
+-                    <textarea
+-                      rows={2}
+-                      value={step.instruction.en}
+-                      onChange={(e) => handleStepChange(idx, 'instructionEn', e.target.value)}
+-                      placeholder={`Step ${idx + 1} Instruction (English)`}
+-                      className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white"
+-                    />
+-                  </div>
+-                </div>
+-              ))}
+-            </div>
+-          </div>
+-
+         </div>
+ 
+         {/* Footer Actions */}
+diff --git a/src/components/ToolDetailPage.tsx b/src/components/ToolDetailPage.tsx
+index 05b103d..922964f 100644
+--- a/src/components/ToolDetailPage.tsx
++++ b/src/components/ToolDetailPage.tsx
+@@ -4,7 +4,7 @@ import { CadIcon } from './CadIcon';
+ import { InteractiveCadCanvas } from './InteractiveCadCanvas';
+ import { 
+   ArrowLeft, ArrowRight, ChevronRight, Edit3, Printer, Share2, 
+-  CheckCircle2, Circle, HelpCircle, AlertTriangle, Film, 
++  HelpCircle, AlertTriangle, Film, 
+   Image as ImageIcon, MousePointer, BookOpen, Sparkles,
+   ExternalLink, Plus, Check, Layers
+ } from 'lucide-react';
+@@ -38,8 +38,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
+   onSaveTool,
+   onOpenLightbox,
+ }) => {
+-  // Interactive step completion tracking (for trainee practice)
+-  const [completedSteps, setCompletedSteps] = useState<{ [id: string]: boolean }>({});
+   const [copiedLink, setCopiedLink] = useState(false);
+   const [selectedSubOptionId, setSelectedSubOptionId] = useState<string | null>(
+     tool.subOptions && tool.subOptions.length > 0 ? tool.subOptions[0].id : null
+@@ -77,13 +75,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
+   // Related tools
+   const relatedTools = allTools.filter((t) => tool.relatedToolIds.includes(t.id));
+ 
+-  const toggleStep = (stepId: string) => {
+-    setCompletedSteps((prev) => ({
+-      ...prev,
+-      [stepId]: !prev[stepId],
+-    }));
+-  };
+-
+   const handleCopyLink = () => {
+     navigator.clipboard.writeText(window.location.href);
+     setCopiedLink(true);
+@@ -302,98 +293,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
+             </div>
+           </div>
+ 
+-          {/* Section 3: Step-by-Step Instructions (操作手順) */}
+-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
+-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+-              <div className="flex items-center gap-2">
+-                <CheckCircle2 className="w-4 h-4 text-orange-600" />
+-                <h2 className="text-base font-bold text-stone-900">
+-                  {lang === 'ja' ? '操作手順ガイド' : 'Step-by-Step Operating Guide'}
+-                </h2>
+-              </div>
+-              <span className="text-xs text-stone-400">
+-                {lang === 'ja' ? '番号順にクリックして進めてください' : 'Follow steps in sequence'}
+-              </span>
+-            </div>
+-
+-            <div className="space-y-4">
+-              {tool.steps.map((step) => {
+-                const isDone = !!completedSteps[step.id];
+-                return (
+-                  <div
+-                    key={step.id}
+-                    className={`p-4 rounded-xl border transition-all ${
+-                      isDone 
+-                        ? 'border-emerald-300 bg-emerald-50/40' 
+-                        : 'border-stone-200 hover:border-orange-300 bg-stone-50/50'
+-                    }`}
+-                  >
+-                    <div className="flex items-start justify-between gap-3">
+-                      <div className="flex items-start gap-3">
+-                        <button
+-                          type="button"
+-                          onClick={() => toggleStep(step.id)}
+-                          className="mt-0.5 text-stone-400 hover:text-emerald-600 transition shrink-0"
+-                          title={isDone ? (lang === 'ja' ? '完了を取り消す' : 'Mark incomplete') : (lang === 'ja' ? '完了にする' : 'Mark complete')}
+-                        >
+-                          {isDone ? (
+-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+-                          ) : (
+-                            <Circle className="w-5 h-5 text-stone-400 hover:text-orange-500" />
+-                          )}
+-                        </button>
+-
+-                        <div className="space-y-1">
+-                          <div className="flex items-center gap-2">
+-                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-orange-600 text-white leading-none">
+-                              Step {step.stepNumber}
+-                            </span>
+-                            <h3 className={`text-sm font-bold text-stone-900 ${isDone ? 'line-through text-stone-500' : ''}`}>
+-                              {lang === 'ja' ? step.title.ja : step.title.en}
+-                            </h3>
+-                          </div>
+-
+-                          <p className="text-xs sm:text-sm text-stone-700 leading-relaxed font-normal pt-1">
+-                            {lang === 'ja' ? step.instruction.ja : step.instruction.en}
+-                          </p>
+-                        </div>
+-                      </div>
+-                    </div>
+-
+-                    {/* Step specific illustration if present */}
+-                    {step.mediaUrl && (
+-                      <div className="mt-3 pt-3 border-t border-stone-200/80">
+-                        <div 
+-                          onClick={() => onOpenLightbox(
+-                            step.mediaUrl!, 
+-                            lang === 'ja' ? step.title.ja : step.title.en,
+-                            step.mediaCaption ? (lang === 'ja' ? step.mediaCaption.ja : step.mediaCaption.en) : undefined
+-                          )}
+-                          className="relative max-w-sm rounded-xl overflow-hidden border border-stone-200 hover:border-orange-500 cursor-pointer group shadow-2xs bg-stone-100"
+-                        >
+-                          <img
+-                            src={step.mediaUrl}
+-                            alt={step.title.ja}
+-                            className="w-full h-36 object-cover group-hover:scale-105 transition duration-200"
+-                          />
+-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-semibold gap-1">
+-                            <ExternalLink className="w-3.5 h-3.5" />
+-                            <span>{lang === 'ja' ? '拡大表示' : 'Enlarge'}</span>
+-                          </div>
+-                        </div>
+-                        {step.mediaCaption && (
+-                          <p className="text-[11px] text-stone-500 mt-1 italic">
+-                            {lang === 'ja' ? step.mediaCaption.ja : step.mediaCaption.en}
+-                          </p>
+-                        )}
+-                      </div>
+-                    )}
+-                  </div>
+-                );
+-              })}
+-            </div>
+-          </div>
+-
+           {/* Section 4: Media Gallery (GIFs and Screenshots) */}
+           <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
+             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+diff --git a/src/components/ToolEditorModal.tsx b/src/components/ToolEditorModal.tsx
+index 5e292b1..51cd03b 100644
+--- a/src/components/ToolEditorModal.tsx
++++ b/src/components/ToolEditorModal.tsx
+@@ -13,6 +13,7 @@ interface ToolEditorModalProps {
+   onClose: () => void;
+   tool: ToolItem | null; // null if creating a new tool
+   categories: CategoryInfo[];
++  allTools?: ToolItem[]; // used to list the existing groupings of a category
+   defaultCategoryId?: RibbonCategoryId;
+   onSave: (savedTool: ToolItem) => void;
+   lang: Language;
+@@ -23,6 +24,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
+   onClose,
+   tool,
+   categories,
++  allTools = [],
+   defaultCategoryId,
+   onSave,
+   lang,
+@@ -34,6 +36,16 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
+   );
+   const [subgroupJa, setSubgroupJa] = useState(tool ? tool.subgroup.ja : '意匠部材');
+   const [subgroupEn, setSubgroupEn] = useState(tool ? tool.subgroup.en : 'Architectural Component');
++  // 'existing' = pick one of the category's current groupings, 'new' = type a new grouping name
++  const [groupMode, setGroupMode] = useState<'existing' | 'new'>('existing');
++
++  // Existing groupings (in ribbon order) of the currently selected category
++  const existingGroups: { ja: string; en: string }[] = [];
++  allTools.forEach((t) => {
++    if (t.categoryId === categoryId && t.subgroup?.ja && !existingGroups.some((g) => g.ja === t.subgroup.ja)) {
++      existingGroups.push({ ja: t.subgroup.ja, en: t.subgroup.en || t.subgroup.ja });
++    }
++  });
+   const [nameJa, setNameJa] = useState(tool ? tool.name.ja : '');
+   const [nameEn, setNameEn] = useState(tool ? tool.name.en : '');
+   const [shortcut, setShortcut] = useState(tool?.shortcut || '');
+@@ -264,6 +276,30 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
+     setActiveTab('basic');
+   }, [tool, isOpen, lang, categories, defaultCategoryId]);
+ 
++  // Keep the grouping choice valid whenever the editor opens or the category changes:
++  // - editing a tool in its own category -> keep its current group
++  // - otherwise -> preselect the category's first existing group, or switch to "new group" if it has none
++  useEffect(() => {
++    if (!isOpen) return;
++    if (tool && categoryId === tool.categoryId) {
++      const exists = existingGroups.some((g) => g.ja === tool.subgroup?.ja);
++      setSubgroupJa(tool.subgroup?.ja || '');
++      setSubgroupEn(tool.subgroup?.en || tool.subgroup?.ja || '');
++      setGroupMode(exists || existingGroups.length === 0 ? 'existing' : 'new');
++      return;
++    }
++    if (existingGroups.length > 0) {
++      setSubgroupJa(existingGroups[0].ja);
++      setSubgroupEn(existingGroups[0].en);
++      setGroupMode('existing');
++    } else {
++      setSubgroupJa('');
++      setSubgroupEn('');
++      setGroupMode('new');
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [isOpen, categoryId, tool?.id]);
++
+   if (!isOpen) return null;
+ 
+   // Custom Icon File Upload Handler
+@@ -710,47 +746,60 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
+                     </label>
+                   </div>
+                   <div className="space-y-1.5">
+-                    <input
+-                      type="text"
+-                      value={subgroupJa}
+-                      onChange={(e) => setSubgroupJa(e.target.value)}
+-                      placeholder={lang === 'ja' ? '例: 柱ツール、スラブツール、梁ツール' : 'Group Name (Japanese)'}
+-                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none"
+-                    />
+-                    <input
+-                      type="text"
+-                      value={subgroupEn}
+-                      onChange={(e) => setSubgroupEn(e.target.value)}
+-                      placeholder="e.g. Column Tools, Slab Tools, Beam Tools"
+-                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none"
+-                    />
+-                    {/* Quick Group Presets */}
+-                    <div className="flex flex-wrap gap-1 pt-1">
+-                      {[
+-                        { ja: '柱ツール', en: 'Column Tools' },
+-                        { ja: '梁・大梁ツール', en: 'Beam Tools' },
+-                        { ja: 'スラブツール', en: 'Slab Tools' },
+-                        { ja: '壁ツール', en: 'Wall Tools' },
+-                        { ja: '仕上ツール', en: 'Finish Tools' },
+-                        { ja: '階段ツール', en: 'Stair Tools' },
+-                      ].map((grp) => (
+-                        <button
+-                          key={grp.ja}
+-                          type="button"
+-                          onClick={() => {
+-                            setSubgroupJa(grp.ja);
+-                            setSubgroupEn(grp.en);
+-                          }}
+-                          className={`px-2 py-0.5 rounded text-[10px] border transition font-medium ${
+-                            subgroupJa === grp.ja
+-                              ? 'bg-orange-600 text-white border-orange-600'
+-                              : 'bg-stone-100 hover:bg-orange-50 text-stone-600 border-stone-200'
+-                          }`}
+-                        >
+-                          {lang === 'ja' ? grp.ja : grp.en}
+-                        </button>
++                    {/* Choose an existing group, or create a new one */}
++                    <select
++                      value={groupMode === 'new' ? '__new__' : subgroupJa}
++                      onChange={(e) => {
++                        const v = e.target.value;
++                        if (v === '__new__') {
++                          setGroupMode('new');
++                          setSubgroupJa('');
++                          setSubgroupEn('');
++                        } else {
++                          const g = existingGroups.find((x) => x.ja === v);
++                          setGroupMode('existing');
++                          setSubgroupJa(v);
++                          setSubgroupEn(g ? g.en : v);
++                        }
++                      }}
++                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none"
++                    >
++                      {existingGroups.map((g) => (
++                        <option key={g.ja} value={g.ja}>
++                          {lang === 'ja' ? g.ja : g.en}
++                        </option>
+                       ))}
+-                    </div>
++                      {groupMode === 'existing' && subgroupJa && !existingGroups.some((g) => g.ja === subgroupJa) && (
++                        <option value={subgroupJa}>{subgroupJa}</option>
++                      )}
++                      <option value="__new__">
++                        {lang === 'ja' ? '＋ 新しいグループを作成…' : '+ Create new group…'}
++                      </option>
++                    </select>
++
++                    {groupMode === 'new' && (
++                      <div className="space-y-1.5 p-2.5 rounded-lg border border-orange-200 bg-orange-50/50">
++                        <input
++                          type="text"
++                          value={subgroupJa}
++                          onChange={(e) => setSubgroupJa(e.target.value)}
++                          placeholder={lang === 'ja' ? '新しいグループ名（日本語）例: ゾーン' : 'New group name (Japanese)'}
++                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none bg-white"
++                        />
++                        <input
++                          type="text"
++                          value={subgroupEn}
++                          onChange={(e) => setSubgroupEn(e.target.value)}
++                          placeholder="New group name (English), e.g. Zone"
++                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none bg-white"
++                        />
++                        <p className="text-[10px] text-orange-800">
++                          {lang === 'ja'
++                            ? 'このツールを保存すると新しいグループがリボンに追加されます。順番は管理者パネルで変更できます。'
++                            : 'Saving this tool adds the new group to the ribbon. You can reorder it in the Admin Panel.'}
++                        </p>
++                      </div>
++                    )}
+                   </div>
+                 </div>
+               </div>
+diff --git a/src/lib/cloudStore.ts b/src/lib/cloudStore.ts
+new file mode 100644
+index 0000000..ed5df5b
+--- /dev/null
++++ b/src/lib/cloudStore.ts
+@@ -0,0 +1,126 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * Row-per-item cloud storage for the manual.
++ *
++ *   gloobe_categories : one row per ribbon tab
++ *   gloobe_tools      : one row per tool (its sub-options / preview boxes / media live in `data`)
++ *   gloobe_settings   : key 'company' -> company branding
++ *
++ * Only rows that actually changed are written, and only rows this browser
++ * previously synced can be deleted. A stale tab therefore can no longer wipe
++ * out tools another person added.
++ */
++
++import type { CategoryInfo, CompanySettings, ToolItem } from '../types/manual';
++import { getSupabaseClient } from './supabase';
++
++export interface ManualSnapshot {
++  categories: CategoryInfo[];
++  tools: ToolItem[];
++  company: CompanySettings | null;
++}
++
++export const EMPTY_SNAPSHOT: ManualSnapshot = { categories: [], tools: [], company: null };
++
++export const snapshotsEqual = (a: ManualSnapshot, b: ManualSnapshot) =>
++  JSON.stringify(a) === JSON.stringify(b);
++
++export type FetchResult =
++  | { ok: true; snapshot: ManualSnapshot; empty: boolean }
++  | { ok: false; error: string; notConfigured?: boolean };
++
++export function isCloudConfigured(): boolean {
++  return !!getSupabaseClient();
++}
++
++export async function fetchManual(): Promise<FetchResult> {
++  const client = getSupabaseClient();
++  if (!client) return { ok: false, error: 'Supabase is not configured', notConfigured: true };
++
++  const [cats, tools, settings] = await Promise.all([
++    client.from('gloobe_categories').select('id,data').order('sort_order', { ascending: true }).order('id'),
++    client.from('gloobe_tools').select('id,data').order('sort_order', { ascending: true }).order('id').limit(5000),
++    client.from('gloobe_settings').select('key,data').eq('key', 'company').maybeSingle(),
++  ]);
++
++  const error = cats.error || tools.error || settings.error;
++  if (error) return { ok: false, error: error.message };
++
++  const categories = (cats.data || []).map((r) => r.data as CategoryInfo);
++  const toolList = (tools.data || []).map((r) => r.data as ToolItem);
++  return {
++    ok: true,
++    empty: categories.length === 0 && toolList.length === 0,
++    snapshot: {
++      categories,
++      tools: toolList,
++      company: (settings.data?.data as CompanySettings | undefined) ?? null,
++    },
++  };
++}
++
++const chunk = <T,>(items: T[], size: number): T[][] => {
++  const out: T[][] = [];
++  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
++  return out;
++};
++
++/** Writes the difference between what this browser last synced (prev) and now (next). */
++export async function pushChanges(prev: ManualSnapshot, next: ManualSnapshot): Promise<void> {
++  const client = getSupabaseClient();
++  if (!client) throw new Error('Supabase is not configured');
++  const now = new Date().toISOString();
++
++  // ---- categories ----
++  const prevCats = new Map(prev.categories.map((c, i) => [c.id, JSON.stringify([c, i])]));
++  const catRows = next.categories
++    .map((c, i) => ({ id: c.id, data: c, sort_order: i, updated_at: now, sig: JSON.stringify([c, i]) }))
++    .filter((r) => prevCats.get(r.id) !== r.sig)
++    .map(({ sig, ...row }) => row);
++  const nextCatIds = new Set(next.categories.map((c) => c.id));
++  const removedCats = prev.categories.map((c) => c.id).filter((id) => !nextCatIds.has(id));
++
++  // ---- tools ----
++  const prevTools = new Map(prev.tools.map((t, i) => [t.id, JSON.stringify([t, i])]));
++  const toolRows = next.tools
++    .map((t, i) => ({
++      id: t.id,
++      category_id: t.categoryId,
++      data: t,
++      sort_order: i,
++      updated_at: now,
++      sig: JSON.stringify([t, i]),
++    }))
++    .filter((r) => prevTools.get(r.id) !== r.sig)
++    .map(({ sig, ...row }) => row);
++  const nextToolIds = new Set(next.tools.map((t) => t.id));
++  const removedTools = prev.tools.map((t) => t.id).filter((id) => !nextToolIds.has(id));
++
++  // Upserts first, deletes last: if something fails half-way nothing is lost.
++  for (const part of chunk(catRows, 100)) {
++    const { error } = await client.from('gloobe_categories').upsert(part);
++    if (error) throw new Error(error.message);
++  }
++  for (const part of chunk(toolRows, 50)) {
++    const { error } = await client.from('gloobe_tools').upsert(part);
++    if (error) throw new Error(error.message);
++  }
++  if (JSON.stringify(prev.company) !== JSON.stringify(next.company) && next.company) {
++    const { error } = await client
++      .from('gloobe_settings')
++      .upsert({ key: 'company', data: next.company, updated_at: now });
++    if (error) throw new Error(error.message);
++  }
++  if (removedTools.length) {
++    const { error } = await client.from('gloobe_tools').delete().in('id', removedTools);
++    if (error) throw new Error(error.message);
++  }
++  if (removedCats.length) {
++    const { error } = await client.from('gloobe_categories').delete().in('id', removedCats);
++    if (error) throw new Error(error.message);
++  }
++}
+diff --git a/src/lib/supabase.ts b/src/lib/supabase.ts
+index 0cc0c72..a9914df 100644
+--- a/src/lib/supabase.ts
++++ b/src/lib/supabase.ts
+@@ -138,6 +138,58 @@ DROP POLICY IF EXISTS "Allow public write access on manual state" ON public.gloo
+ CREATE POLICY "Allow public write access on manual state"
+ ON public.gloobe_manual_state FOR ALL USING (true) WITH CHECK (true);
+ 
++-- -------------------------------------------------------------------------
++-- 3b. Row-per-item storage used by the app for tools, tabs and company settings
++-- -------------------------------------------------------------------------
++-- =========================================================================
++-- GLOOBE BIM Manual: row-per-item storage (run ONCE in Supabase > SQL Editor)
++-- Safe to re-run. Does not touch your old gloobe_manual_state row, which is
++-- used automatically to fill the new tables the first time the site opens.
++-- =========================================================================
++
++CREATE TABLE IF NOT EXISTS public.gloobe_categories (
++    id TEXT PRIMARY KEY,
++    data JSONB NOT NULL,
++    sort_order INTEGER NOT NULL DEFAULT 0,
++    updated_at TIMESTAMPTZ DEFAULT now()
++);
++
++CREATE TABLE IF NOT EXISTS public.gloobe_tools (
++    id TEXT PRIMARY KEY,
++    category_id TEXT,
++    data JSONB NOT NULL,
++    sort_order INTEGER NOT NULL DEFAULT 0,
++    updated_at TIMESTAMPTZ DEFAULT now()
++);
++CREATE INDEX IF NOT EXISTS idx_gloobe_tools_category ON public.gloobe_tools(category_id);
++CREATE INDEX IF NOT EXISTS idx_gloobe_tools_sort ON public.gloobe_tools(sort_order);
++
++CREATE TABLE IF NOT EXISTS public.gloobe_settings (
++    key TEXT PRIMARY KEY,
++    data JSONB NOT NULL,
++    updated_at TIMESTAMPTZ DEFAULT now()
++);
++
++ALTER TABLE public.gloobe_categories ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.gloobe_tools      ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.gloobe_settings   ENABLE ROW LEVEL SECURITY;
++
++DROP POLICY IF EXISTS "gloobe_categories_all" ON public.gloobe_categories;
++CREATE POLICY "gloobe_categories_all" ON public.gloobe_categories FOR ALL USING (true) WITH CHECK (true);
++DROP POLICY IF EXISTS "gloobe_tools_all" ON public.gloobe_tools;
++CREATE POLICY "gloobe_tools_all" ON public.gloobe_tools FOR ALL USING (true) WITH CHECK (true);
++DROP POLICY IF EXISTS "gloobe_settings_all" ON public.gloobe_settings;
++CREATE POLICY "gloobe_settings_all" ON public.gloobe_settings FOR ALL USING (true) WITH CHECK (true);
++
++-- Safety copy of the old single-row data (only created once, only if the old table exists)
++DO $$
++BEGIN
++  IF to_regclass('public.gloobe_manual_state') IS NOT NULL
++     AND to_regclass('public.gloobe_manual_state_backup') IS NULL THEN
++    EXECUTE 'CREATE TABLE public.gloobe_manual_state_backup AS SELECT *, now() AS backed_up_at FROM public.gloobe_manual_state';
++  END IF;
++END $$;
++
+ -- -------------------------------------------------------------------------
+ -- 4. Storage setup. Run this in the SQL Editor once, then keep the bucket
+ --    public so the URLs returned by getPublicUrl work for every visitor.
+diff --git a/supabase-migration.sql b/supabase-migration.sql
+new file mode 100644
+index 0000000..3a9b800
+--- /dev/null
++++ b/supabase-migration.sql
+@@ -0,0 +1,48 @@
++-- =========================================================================
++-- GLOOBE BIM Manual: row-per-item storage (run ONCE in Supabase > SQL Editor)
++-- Safe to re-run. Does not touch your old gloobe_manual_state row, which is
++-- used automatically to fill the new tables the first time the site opens.
++-- =========================================================================
++
++CREATE TABLE IF NOT EXISTS public.gloobe_categories (
++    id TEXT PRIMARY KEY,
++    data JSONB NOT NULL,
++    sort_order INTEGER NOT NULL DEFAULT 0,
++    updated_at TIMESTAMPTZ DEFAULT now()
++);
++
++CREATE TABLE IF NOT EXISTS public.gloobe_tools (
++    id TEXT PRIMARY KEY,
++    category_id TEXT,
++    data JSONB NOT NULL,
++    sort_order INTEGER NOT NULL DEFAULT 0,
++    updated_at TIMESTAMPTZ DEFAULT now()
++);
++CREATE INDEX IF NOT EXISTS idx_gloobe_tools_category ON public.gloobe_tools(category_id);
++CREATE INDEX IF NOT EXISTS idx_gloobe_tools_sort ON public.gloobe_tools(sort_order);
++
++CREATE TABLE IF NOT EXISTS public.gloobe_settings (
++    key TEXT PRIMARY KEY,
++    data JSONB NOT NULL,
++    updated_at TIMESTAMPTZ DEFAULT now()
++);
++
++ALTER TABLE public.gloobe_categories ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.gloobe_tools      ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.gloobe_settings   ENABLE ROW LEVEL SECURITY;
++
++DROP POLICY IF EXISTS "gloobe_categories_all" ON public.gloobe_categories;
++CREATE POLICY "gloobe_categories_all" ON public.gloobe_categories FOR ALL USING (true) WITH CHECK (true);
++DROP POLICY IF EXISTS "gloobe_tools_all" ON public.gloobe_tools;
++CREATE POLICY "gloobe_tools_all" ON public.gloobe_tools FOR ALL USING (true) WITH CHECK (true);
++DROP POLICY IF EXISTS "gloobe_settings_all" ON public.gloobe_settings;
++CREATE POLICY "gloobe_settings_all" ON public.gloobe_settings FOR ALL USING (true) WITH CHECK (true);
++
++-- Safety copy of the old single-row data (only created once, only if the old table exists)
++DO $$
++BEGIN
++  IF to_regclass('public.gloobe_manual_state') IS NOT NULL
++     AND to_regclass('public.gloobe_manual_state_backup') IS NULL THEN
++    EXECUTE 'CREATE TABLE public.gloobe_manual_state_backup AS SELECT *, now() AS backed_up_at FROM public.gloobe_manual_state';
++  END IF;
++END $$;
