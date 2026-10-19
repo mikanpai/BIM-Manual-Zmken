@@ -427,24 +427,6 @@ export default function App() {
     setSelectedSubOption({ tool: updatedTool, subOption: updatedSub });
   };
 
-  const handleDeleteSubOption = (subOptionId: string) => {
-    if (!selectedSubOption) return;
-    const parent = selectedSubOption.tool;
-    const sub = (parent.subOptions || []).find((s) => s.id === subOptionId);
-    if (!sub) return;
-    const msg = lang === 'ja'
-      ? `サブ機能「${sub.name.ja}」を削除しますか？\nクラウドのデータからも削除されます。`
-      : `Delete sub-option "${sub.name.en || sub.name.ja}"?\nIt will also be removed from the cloud data.`;
-    if (!window.confirm(msg)) return;
-    const remaining = (parent.subOptions || []).filter((s) => s.id !== subOptionId);
-    const updatedTool: ToolItem = { ...parent, subOptions: remaining.length > 0 ? remaining : undefined };
-    handleSaveTool(updatedTool);
-    setSelectedSubOption(null);
-    setSelectedTool(updatedTool);
-    window.location.hash = updatedTool.id;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const handleSaveCategories = (updatedCategories: CategoryInfo[]) => {
     setCategories(updatedCategories);
     setTools((currentTools) => keepToolsInCategories(currentTools, updatedCategories));
@@ -606,7 +588,6 @@ export default function App() {
             }}
             onSaveSubOption={handleSaveSubOption}
             onSaveTool={handleSaveTool}
-            onDeleteSubOption={handleDeleteSubOption}
           />
         ) : selectedTool ? (
           /* DEDICATED TOOL PAGE VIEW */

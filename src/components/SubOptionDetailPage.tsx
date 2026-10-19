@@ -5,7 +5,7 @@ import { InteractiveCadCanvas } from './InteractiveCadCanvas';
 import { 
   ArrowLeft, ArrowRight, ChevronRight, Edit3, Printer, Share2, 
   HelpCircle, AlertTriangle, Film, 
-  Keyboard, Sparkles, Plus, Check, Layers, Trash2
+  Keyboard, Sparkles, Plus, Check, Layers
 } from 'lucide-react';
 import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
 import { SubOptionEditorModal } from './SubOptionEditorModal';
@@ -21,7 +21,6 @@ interface SubOptionDetailPageProps {
   onSelectSubOption: (sub: SubOptionItem) => void;
   onSaveSubOption: (updatedSubOption: SubOptionItem) => void;
   onSaveTool: (updatedTool: ToolItem) => void;
-  onDeleteSubOption?: (subOptionId: string) => void;
 }
 
 export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
@@ -35,7 +34,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
   onSelectSubOption,
   onSaveSubOption,
   onSaveTool,
-  onDeleteSubOption,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -279,17 +277,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
               <Edit3 className="w-3.5 h-3.5" />
               <span>{lang === 'ja' ? 'このサブ機能を編集' : 'Edit Sub-Option'}</span>
             </button>
-
-            {onDeleteSubOption && (
-              <button
-                onClick={() => onDeleteSubOption(subOption.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 text-xs font-semibold shadow-2xs transition"
-                title={lang === 'ja' ? 'このサブ機能を削除' : 'Delete this sub-option'}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{lang === 'ja' ? '削除' : 'Delete'}</span>
-              </button>
-            )}
 
             <button
               onClick={() => window.print()}
