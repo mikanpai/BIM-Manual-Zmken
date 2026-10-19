@@ -6,7 +6,7 @@ import {
   ArrowLeft, ArrowRight, ChevronRight, Edit3, Printer, Share2, 
   HelpCircle, AlertTriangle, Film, 
   Image as ImageIcon, MousePointer, BookOpen, Sparkles,
-  ExternalLink, Plus, Check, Layers, Trash2
+  ExternalLink, Plus, Check, Layers
 } from 'lucide-react';
 import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
 import { SupabaseMediaGallery } from './SupabaseMediaGallery';
@@ -22,7 +22,6 @@ interface ToolDetailPageProps {
   onSelectSubOption?: (tool: ToolItem, subOption: SubOptionItem) => void;
   onEditTool: (tool: ToolItem) => void;
   onSaveTool?: (tool: ToolItem) => void;
-  onDeleteTool?: (toolId: string) => void;
   onOpenLightbox: (imageUrl: string, title: string, caption?: string, isGif?: boolean) => void;
 }
 
@@ -37,7 +36,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
   onSelectSubOption,
   onEditTool,
   onSaveTool,
-  onDeleteTool,
   onOpenLightbox,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
@@ -178,17 +176,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
               <Edit3 className="w-3.5 h-3.5" />
               <span>{lang === 'ja' ? 'このマニュアルを編集' : 'Edit Tool Manual'}</span>
             </button>
-
-            {onDeleteTool && (
-              <button
-                onClick={() => onDeleteTool(tool.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 text-xs font-semibold shadow-2xs transition"
-                title={lang === 'ja' ? 'このツールを削除' : 'Delete this tool'}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{lang === 'ja' ? '削除' : 'Delete'}</span>
-              </button>
-            )}
 
             <button
               onClick={handlePrint}
