@@ -17,6 +17,7 @@ import { MainMenuPage } from './components/MainMenuPage';
 import { ToolDetailPage } from './components/ToolDetailPage';
 import { SubOptionDetailPage } from './components/SubOptionDetailPage';
 import { ToolEditorModal } from './components/ToolEditorModal';
+import { SubOptionEditorModal } from './components/SubOptionEditorModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
 import { ImageLightboxModal } from './components/ImageLightboxModal';
@@ -378,6 +379,24 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // "Add Sub-Option" from the ribbon dropdown of a specific tool
+  const [newSubOptionDraft, setNewSubOptionDraft] = useState<{ toolId: string; sub: SubOptionItem } | null>(null);
+
+  const handleStartAddSubOption = (tool: ToolItem) => {
+    const current = tools.find((t) => t.id === tool.id) ?? tool;
+    const nextNum = (current.subOptions?.length ?? 0) + 1;
+    setNewSubOptionDraft({
+      toolId: current.id,
+      sub: {
+        id: `sub-${Date.now()}-${nextNum}`,
+        name: { ja: `サブ機能 ${nextNum}`, en: `Sub-option ${nextNum}` },
+        desc: { ja: 'サブコマンドの説明', en: 'Sub-command description' },
+        iconType: current.iconType,
+        shortcut: '',
+      },
+    });
+  };
+
   const handleAddNewTool = () => {
     setEditingTool(null);
     setIsEditorOpen(true);
@@ -559,6 +578,7 @@ export default function App() {
         onSelectTool={handleSelectTool}
         onSelectSubOption={handleSelectSubOption}
         onAddNewTool={handleAddNewTool}
+        onAddSubOption={handleStartAddSubOption}
         onSaveTools={(updatedTools) => {
           setTools(updatedTools);
           if (selectedTool) {
@@ -650,6 +670,27 @@ export default function App() {
       </footer>
 
       {/* 5. Modals */}
+      {/* New sub-option for the tool whose dropdown "Add Sub-Option" was clicked */}
+      {newSubOptionDraft && (() => {
+        const parent = tools.find((t) => t.id === newSubOptionDraft.toolId);
+        if (!parent) return null;
+        return (
+          <SubOptionEditorModal
+            key={newSubOptionDraft.sub.id}
+            isOpen
+            onClose={() => setNewSubOptionDraft(null)}
+            subOption={newSubOptionDraft.sub}
+            parentToolName={parent.name}
+            defaultIconType={parent.iconType}
+            onSave={(created) => {
+              handleSaveTool({ ...parent, subOptions: [...(parent.subOptions || []), created] });
+              setNewSubOptionDraft(null);
+            }}
+            lang={lang}
+          />
+        );
+      })()}
+
       {/* Tool Editor Modal (Create or Edit Tool, Steps, Preview Boxes, Sub-options, and GIFs) */}
       {isEditorOpen && (
         <ToolEditorModal

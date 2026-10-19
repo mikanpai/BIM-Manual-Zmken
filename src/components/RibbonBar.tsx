@@ -27,6 +27,7 @@ interface RibbonBarProps {
   onSelectTool: (tool: ToolItem) => void;
   onSelectSubOption?: (tool: ToolItem, subOption: SubOptionItem) => void;
   onAddNewTool: () => void;
+  onAddSubOption?: (tool: ToolItem) => void;
   onSaveTools?: (updatedTools: ToolItem[]) => void;
   onNavigateHome: () => void;
   isPaletteVisible?: boolean;
@@ -41,6 +42,7 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
   onSelectTool,
   onSelectSubOption,
   onAddNewTool,
+  onAddSubOption,
   onNavigateHome,
   isPaletteVisible = true,
   lang,
@@ -827,17 +829,35 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
                 : 'Press Esc to close'}
             </span>
 
-            <button
-              type="button"
-              onClick={() => {
-                closeDropdown();
-                onAddNewTool();
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:border-orange-500 hover:bg-orange-50 text-orange-800 font-bold text-[10px] shadow-sm transition"
-            >
-              <Plus className="w-3 h-3" />
-              <span>{lang === 'ja' ? 'ツールを追加' : 'Add Tool'}</span>
-            </button>
+            {activeDropdownContent.type === 'subOptions' &&
+            activeDropdownContent.parentTool &&
+            onAddSubOption ? (
+              /* Inside a tool's sub-option list: add a sub-option to THIS tool */
+              <button
+                type="button"
+                onClick={() => {
+                  const parent = activeDropdownContent.parentTool!;
+                  closeDropdown();
+                  onAddSubOption(parent);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:border-orange-500 hover:bg-orange-50 text-orange-800 font-bold text-[10px] shadow-sm transition"
+              >
+                <Plus className="w-3 h-3" />
+                <span>{lang === 'ja' ? 'サブ機能を追加' : 'Add Sub-Option'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  closeDropdown();
+                  onAddNewTool();
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:border-orange-500 hover:bg-orange-50 text-orange-800 font-bold text-[10px] shadow-sm transition"
+              >
+                <Plus className="w-3 h-3" />
+                <span>{lang === 'ja' ? 'ツールを追加' : 'Add Tool'}</span>
+              </button>
+            )}
           </div>
         </div>
       )}
