@@ -314,30 +314,12 @@ export default function App() {
     }
   }, [activeRibbonCategory, categories]);
 
-  // Handle URL hash on initial load
+  // Always start on the home page: a leftover #tool-link in the address bar is cleared on load
   useEffect(() => {
-    const hash = window.location.hash.replace('#', '');
-    if (hash) {
-      if (hash.includes('__')) {
-        const [toolId, subId] = hash.split('__');
-        const matchedTool = tools.find((t) => t.id === toolId);
-        if (matchedTool) {
-          const matchedSub = matchedTool.subOptions?.find((s) => s.id === subId);
-          if (matchedSub) {
-            setSelectedTool(matchedTool);
-            setSelectedSubOption({ tool: matchedTool, subOption: matchedSub });
-            return;
-          }
-          setSelectedTool(matchedTool);
-        }
-      } else {
-        const matched = tools.find((t) => t.id === hash);
-        if (matched) {
-          setSelectedTool(matched);
-        }
-      }
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
-  }, [tools]);
+  }, []);
 
   // Handlers
   const handleToggleLang = () => {
@@ -570,10 +552,9 @@ export default function App() {
         tools={tools}
         currentCategory={activeRibbonCategory}
         onSelectCategory={(catId) => {
+          // Only switch the tab and show its toolbar. The page you are on stays as it is.
           setActiveRibbonCategory(catId);
           setIsRibbonPaletteVisible(true);
-          if (selectedSubOption) setSelectedSubOption(null);
-          if (selectedTool) setSelectedTool(null);
         }}
         onSelectTool={handleSelectTool}
         onSelectSubOption={handleSelectSubOption}
