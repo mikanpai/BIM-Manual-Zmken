@@ -1,3 +1,4 @@
+import { removeToolFromList } from '../lib/toolOps';
 import React, { useState } from 'react';
 import { CategoryInfo, CompanySettings, Language, SupabaseConfig, ToolItem } from '../types/manual';
 import { 
@@ -622,6 +623,26 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       return prev.map((t) => (t.categoryId === selectedCatId && t.dropdownGroup ? reordered[i++] : t));
     });
   };
+
+  // Delete a tool (applied when "Save & Apply" is pressed)
+  const handleDeleteTool = (tool: ToolItem) => {
+    const msg = lang === 'ja'
+      ? `ツール「${tool.name.ja}」を削除しますか？\n（「保存して適用」を押すと反映されます）`
+      : `Delete tool "${tool.name.en || tool.name.ja}"?\n(Applied when you press Save & Apply)`;
+    if (!window.confirm(msg)) return;
+    setLocalTools((prev) => removeToolFromList(prev, tool.id));
+  };
+
+  const renderDeleteButton = (tool: ToolItem) => (
+    <button
+      type="button"
+      onClick={() => handleDeleteTool(tool)}
+      className="p-1.5 rounded-lg border border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700 hover:border-red-400 transition cursor-pointer shrink-0"
+      title={lang === 'ja' ? 'このツールを削除' : 'Delete this tool'}
+    >
+      <Trash2 className="w-3.5 h-3.5" />
+    </button>
+  );
 
   const renderOrderButtons = (onUp: () => void, onDown: () => void, canUp: boolean, canDown: boolean) => (
     <div className="flex items-center gap-0.5 shrink-0">
@@ -1261,6 +1282,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                 tIdx < gTools.length - 1
                               )}
 
+                              {renderDeleteButton(t)}
+
                               {/* Move tool to another group selector */}
                               <select
                                 value={t.subgroup.ja}
@@ -1652,6 +1675,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   idx < groupTools.length - 1
                                 )}
 
+                                {renderDeleteButton(gt)}
+
                                 {!gt.isDropdownTrigger && (
                                   <button
                                     type="button"
@@ -1731,6 +1756,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           sIdx > 0,
                           sIdx < standaloneTools.length - 1
                         )}
+
+                        {renderDeleteButton(st)}
 
                         {/* Move into existing or new dropdown */}
                         {dropdownGroupIds.length > 0 ? (

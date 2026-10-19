@@ -21,6 +21,7 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
 import { ImageLightboxModal } from './components/ImageLightboxModal';
 import { Plus, Search, Sparkles, Building2, HelpCircle } from 'lucide-react';
+import { removeToolFromList } from './lib/toolOps';
 import { loadSharedManualState } from './lib/supabase';
 import {
   EMPTY_SNAPSHOT, ManualSnapshot, fetchManual, fetchPreviousJsonStore, isCloudConfigured, pushChanges, snapshotsEqual,
@@ -370,6 +371,17 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleDeleteTool = (toolId: string) => {
+    const tool = tools.find((t) => t.id === toolId);
+    if (!tool) return;
+    const msg = lang === 'ja'
+      ? `ツール「${tool.name.ja}」を削除しますか？\nクラウドのデータからも削除されます。`
+      : `Delete tool "${tool.name.en || tool.name.ja}"?\nIt will also be removed from the cloud data.`;
+    if (!window.confirm(msg)) return;
+    setTools((prev) => removeToolFromList(prev, toolId));
+    if (selectedTool?.id === toolId || selectedSubOption?.tool.id === toolId) handleBackToList();
+  };
+
   const handleBackToList = () => {
     setIsRibbonPaletteVisible(false);
     setSelectedSubOption(null);
@@ -425,6 +437,24 @@ export default function App() {
     };
     handleSaveTool(updatedTool);
     setSelectedSubOption({ tool: updatedTool, subOption: updatedSub });
+  };
+
+  const handleDeleteSubOption = (subOptionId: string) => {
+    if (!selectedSubOption) return;
+    const parent = selectedSubOption.tool;
+    const sub = (parent.subOptions || []).find((s) => s.id === subOptionId);
+    if (!sub) return;
+    const msg = lang === 'ja'
+      ? `サブ機能「${sub.name.ja}」を削除しますか？\nクラウドのデータからも削除されます。`
+      : `Delete sub-option "${sub.name.en || sub.name.ja}"?\nIt will also be removed from the cloud data.`;
+    if (!window.confirm(msg)) return;
+    const remaining = (parent.subOptions || []).filter((s) => s.id !== subOptionId);
+    const updatedTool: ToolItem = { ...parent, subOptions: remaining.length > 0 ? remaining : undefined };
+    handleSaveTool(updatedTool);
+    setSelectedSubOption(null);
+    setSelectedTool(updatedTool);
+    window.location.hash = updatedTool.id;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSaveCategories = (updatedCategories: CategoryInfo[]) => {
@@ -588,6 +618,7 @@ export default function App() {
             }}
             onSaveSubOption={handleSaveSubOption}
             onSaveTool={handleSaveTool}
+            onDeleteSubOption={handleDeleteSubOption}
           />
         ) : selectedTool ? (
           /* DEDICATED TOOL PAGE VIEW */
@@ -602,6 +633,7 @@ export default function App() {
             onSelectSubOption={handleSelectSubOption}
             onEditTool={handleEditTool}
             onSaveTool={handleSaveTool}
+            onDeleteTool={handleDeleteTool}
             onOpenLightbox={handleOpenLightbox}
           />
         ) : (
