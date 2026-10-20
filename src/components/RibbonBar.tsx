@@ -81,7 +81,16 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
       if (event.key === 'Escape') closeDropdown();
     };
 
-    const handleScrollOrResize = () => {
+    const handleScrollOrResize = (event: Event) => {
+      // Scrolling the list INSIDE the popup must not close it
+      if (
+        event.type === 'scroll' &&
+        dropdownRef.current &&
+        event.target instanceof Node &&
+        dropdownRef.current.contains(event.target)
+      ) {
+        return;
+      }
       closeDropdown();
     };
 
@@ -699,7 +708,7 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
             </div>
           )}
 
-          <div className="max-h-[380px] overflow-y-auto p-1.5 space-y-1 scrollbar-thin">
+          <div className="max-h-[380px] overflow-y-auto overscroll-contain p-1.5 space-y-1 scrollbar-thin">
             {activeDropdownContent.type === 'group' &&
               activeDropdownContent.tools?.map((dropdownTool) => {
                 const isSelected = selectedToolId === dropdownTool.id;
