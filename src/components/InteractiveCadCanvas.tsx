@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Language, PreviewMediaItem, StepItem } from '../types/manual';
 import { 
   Play, Pause, ChevronLeft, ChevronRight, Film, Edit3, Trash2, Eye,
@@ -117,6 +117,17 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
     setIsPlaying(false);
     setCurrentStepIndex(index);
   };
+
+  // Keep the active step button visible inside the (horizontally scrolling) button bar
+  const stepBarRef = useRef<HTMLDivElement>(null);
+  const stepButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  useEffect(() => {
+    const bar = stepBarRef.current;
+    const button = stepButtonRefs.current[currentStepIndex];
+    if (!bar || !button) return;
+    const target = button.offsetLeft - (bar.clientWidth - button.offsetWidth) / 2;
+    bar.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  }, [currentStepIndex, totalSteps]);
 
   // Media navigation
   // Current active step information
@@ -351,7 +362,7 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
       </div>
 
       {/* Media Canvas Stage (Shows GIF Demo, WebM Video, or Fallback) */}
-      <div className="group/stage relative aspect-[16/10] sm:aspect-[16/9] max-h-[340px] w-full rounded-xl overflow-hidden bg-stone-100 flex items-center justify-center border border-stone-200 shadow-2xs">
+      <div className="group/stage relative w-full h-[70vh] min-h-[420px] max-h-[780px] rounded-xl overflow-hidden bg-stone-100 flex items-center justify-center border border-stone-200 shadow-2xs">
         {activeMediaUrl ? (
           <div className="relative w-full h-full flex items-center justify-center bg-stone-900">
             {isVideo ? (
@@ -574,14 +585,15 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
           </button>
 
           {/* Clickable 1, 2, 3, 4 Step Buttons */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 px-2">
+          <div ref={stepBarRef} className="relative flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 px-2 scrollbar-none">
             {Array.from({ length: totalSteps }).map((_, idx) => {
               const isCurrent = currentStepIndex === idx;
               return (
                 <button
                   key={idx}
+                  ref={(el) => { stepButtonRefs.current[idx] = el; }}
                   onClick={() => handleStepClick(idx)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all shadow-2xs ${
+                  className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all shadow-2xs ${
                     isCurrent
                       ? 'bg-orange-600 text-white shadow-md scale-105 ring-2 ring-orange-300'
                       : 'bg-white border border-stone-200 text-stone-600 hover:border-orange-300 hover:bg-orange-50/60'

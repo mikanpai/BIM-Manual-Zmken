@@ -315,10 +315,10 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
       </div>
 
       {/* Main Grid: Left Detailed Content, Right Utilities */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-6">
         
-        {/* Left Column (2 Cols wide on desktop) */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Full-width content */}
+        <div className="space-y-6">
           
           {/* Section 1: Overview */}
           <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-3">
@@ -381,41 +381,6 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
                 />
               ))}
             </div>
-          </div>
-
-
-        </div>
-
-        {/* Right Column: Utilities & Parent Overview */}
-        <div className="space-y-6">
-          
-          {/* Box 1: Parent Tool Info Card */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">
-              {lang === 'ja' ? '親ツール情報' : 'Parent Tool Overview'}
-            </h3>
-
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center shrink-0 border border-orange-200">
-                <CadIcon type={tool.iconType} customIconUrl={tool.customIconUrl} size={22} />
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-sm font-bold text-stone-900 truncate">
-                  {lang === 'ja' ? tool.name.ja : tool.name.en}
-                </h4>
-                <p className="text-[11px] text-stone-500 truncate">
-                  {lang === 'ja' ? tool.shortDesc.ja : tool.shortDesc.en}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={onBackToParent}
-              className="w-full py-2 px-3 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-            >
-              <span>{lang === 'ja' ? '親ツールのマニュアルを開く' : 'Open Parent Tool Page'}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
           </div>
 
 

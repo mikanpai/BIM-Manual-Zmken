@@ -9,7 +9,6 @@ import {
   ExternalLink, Plus, Check, Layers
 } from 'lucide-react';
 import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
-import { SupabaseMediaGallery } from './SupabaseMediaGallery';
 
 interface ToolDetailPageProps {
   tool: ToolItem;
@@ -292,96 +291,6 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
               ))}
             </div>
           </div>
-
-          {/* Section 4: Media Gallery (GIFs and Screenshots) */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <div className="flex items-center gap-2">
-                <Film className="w-4 h-4 text-orange-600" />
-                <h2 className="text-base font-bold text-stone-900">
-                  {lang === 'ja' ? '操作デモ GIF / 画像ギャラリー' : 'Operation GIF & Image Gallery'}
-                </h2>
-              </div>
-              <button
-                onClick={() => onEditTool(tool)}
-                className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-semibold"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{lang === 'ja' ? 'メディアを追加' : 'Add Media'}</span>
-              </button>
-            </div>
-
-            {tool.media.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {tool.media.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => onOpenLightbox(
-                      item.url, 
-                      lang === 'ja' ? item.title.ja : item.title.en,
-                      item.caption ? (lang === 'ja' ? item.caption.ja : item.caption.en) : undefined,
-                      item.type === 'gif'
-                    )}
-                    className="group relative bg-white rounded-xl overflow-hidden border border-stone-200 hover:border-orange-500 cursor-pointer shadow-xs transition"
-                  >
-                    <div className="relative aspect-video bg-stone-100 flex items-center justify-center overflow-hidden">
-                      <img
-                        src={item.url}
-                        alt={item.title.ja}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                      {item.type === 'gif' && (
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-orange-600 text-white text-[10px] font-bold shadow-xs">
-                          {lang === 'ja' ? 'GIF 動態' : 'GIF Demo'}
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-semibold gap-1">
-                        <ExternalLink className="w-4 h-4" />
-                        <span>{lang === 'ja' ? 'クリックして拡大' : 'Click to View'}</span>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-white border-t border-stone-100">
-                      <h4 className="text-xs font-bold text-stone-900 truncate">
-                        {lang === 'ja' ? item.title.ja : item.title.en}
-                      </h4>
-                      {item.caption && (
-                        <p className="text-[11px] text-stone-500 truncate mt-0.5">
-                          {lang === 'ja' ? item.caption.ja : item.caption.en}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center border-2 border-dashed border-stone-200 rounded-xl bg-stone-50/50">
-                <ImageIcon className="w-8 h-8 mx-auto mb-2 text-stone-300" />
-                <p className="text-xs text-stone-500 mb-2">
-                  {lang === 'ja' ? 'このツールにはまだ画像やGIFが登録されていません。' : 'No images or GIFs registered yet.'}
-                </p>
-                <button
-                  onClick={() => onEditTool(tool)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-semibold hover:bg-orange-700 transition"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{lang === 'ja' ? 'GIFまたは画像をアップロード' : 'Upload GIF or Image'}</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Section 4.5: Supabase Cloud Media Feed (GIFs, WebM, Images) */}
-          <SupabaseMediaGallery
-            categoryId={tool.categoryId}
-            toolId={tool.id}
-            toolName={tool.name}
-            lang={lang}
-            onOpenLightbox={onOpenLightbox}
-            title={{
-              ja: `${tool.name.ja} 関連クラウドメディア (Supabase)`,
-              en: `${tool.name.en} Cloud Media (Supabase)`
-            }}
-          />
 
           {/* Section 5: Pro Tips & Warnings (コツと注意事項) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
