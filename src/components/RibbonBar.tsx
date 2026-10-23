@@ -31,6 +31,7 @@ interface RibbonBarProps {
   onSaveTools?: (updatedTools: ToolItem[]) => void;
   onNavigateHome: () => void;
   isPaletteVisible?: boolean;
+  activeToolId?: string | null; // tool whose page is currently open
   lang: Language;
 }
 
@@ -45,6 +46,7 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
   onAddSubOption,
   onNavigateHome,
   isPaletteVisible = true,
+  activeToolId = null,
   lang,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -53,6 +55,19 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
     toolId: string;
     subOptionId: string;
   } | null>(null);
+
+  // Which tool of each dropdown currently "covers" the dropdown button.
+  // Only lives in this session: after a refresh every dropdown shows its original cover icon again.
+  const [coverToolByGroup, setCoverToolByGroup] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!activeToolId) return;
+    const active = tools.find((t) => t.id === activeToolId);
+    if (active?.dropdownGroup) {
+      const groupId = active.dropdownGroup;
+      setCoverToolByGroup((prev) => (prev[groupId] === active.id ? prev : { ...prev, [groupId]: active.id }));
+    }
+  }, [activeToolId, tools]);
 
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{
@@ -160,6 +175,10 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
   };
 
   const selectMainTool = (tool: ToolItem) => {
+    if (tool.dropdownGroup) {
+      const groupId = tool.dropdownGroup;
+      setCoverToolByGroup((prev) => ({ ...prev, [groupId]: tool.id }));
+    }
     setSelectedToolId(tool.id);
     setSelectedSubOption(null);
     closeDropdown();
@@ -505,6 +524,12 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
                       );
 
                       const triggerTool = item.triggerTool;
+                      // The dropdown button shows the icon of the tool picked last (until refresh)
+                      const coverId = coverToolByGroup[item.groupId];
+                      const coverTool =
+                        coverId && coverId !== triggerTool.id
+                          ? item.tools.find((t) => t.id === coverId)
+                          : undefined;
 
                       return (
                         <div key={item.groupId} className="relative">
@@ -538,12 +563,16 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
                               <div className="relative w-8 h-8 rounded-lg bg-white group-hover:bg-sky-600 text-stone-700 group-hover:text-white flex items-center justify-center transition border border-stone-200 group-hover:border-transparent shadow-sm">
                                 <CadIcon
                                   type={
-                                    triggerTool.dropdownGroupIconType ||
-                                    triggerTool.iconType
+                                    coverTool
+                                      ? coverTool.iconType
+                                      : triggerTool.dropdownGroupIconType ||
+                                        triggerTool.iconType
                                   }
                                   customIconUrl={
-                                    triggerTool.dropdownGroupCustomIconUrl ||
-                                    triggerTool.customIconUrl
+                                    coverTool
+                                      ? coverTool.customIconUrl
+                                      : triggerTool.dropdownGroupCustomIconUrl ||
+                                        triggerTool.customIconUrl
                                   }
                                   size={18}
                                 />

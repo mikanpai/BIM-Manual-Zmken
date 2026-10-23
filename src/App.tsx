@@ -557,6 +557,7 @@ export default function App() {
           setIsRibbonPaletteVisible(true);
         }}
         onSelectTool={handleSelectTool}
+        activeToolId={selectedTool?.id ?? null}
         onSelectSubOption={handleSelectSubOption}
         onAddNewTool={handleAddNewTool}
         onAddSubOption={handleStartAddSubOption}

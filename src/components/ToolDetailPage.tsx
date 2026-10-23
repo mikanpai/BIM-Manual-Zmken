@@ -85,7 +85,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="w-full max-w-[1560px] mx-auto px-4 sm:px-6 py-6 space-y-6">
       
       {/* Top Breadcrumb & Navigation Controls */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-stone-200">
@@ -233,8 +233,8 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
             </p>
           </div>
 
-          {/* Section 2: PREVIEW TOOL - wider than the page column so the video can be read without zooming */}
-          <div className="relative left-1/2 w-[min(1560px,calc(100vw-48px))] -translate-x-1/2 bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
+          {/* Section 2: PREVIEW TOOL */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
               <div className="flex items-center gap-2">
                 <Film className="w-4 h-4 text-orange-600" />
