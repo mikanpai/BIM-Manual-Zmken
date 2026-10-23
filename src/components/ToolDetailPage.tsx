@@ -233,8 +233,8 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
             </p>
           </div>
 
-          {/* Section 2: PREVIEW TOOL (USER REQUESTED: Preview Tool with multiple boxes & 1-4 manual arrow bar) */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
+          {/* Section 2: PREVIEW TOOL - wider than the page column so the video can be read without zooming */}
+          <div className="relative left-1/2 w-[min(1560px,calc(100vw-48px))] -translate-x-1/2 bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
               <div className="flex items-center gap-2">
                 <Film className="w-4 h-4 text-orange-600" />

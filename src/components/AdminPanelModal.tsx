@@ -1,4 +1,4 @@
-import { removeToolFromList } from '../lib/toolOps';
+import { removeToolFromList, convertSubOptionsToDropdown } from '../lib/toolOps';
 import React, { useState } from 'react';
 import { CategoryInfo, CompanySettings, Language, SupabaseConfig, ToolItem } from '../types/manual';
 import { 
@@ -632,6 +632,42 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     if (!window.confirm(msg)) return;
     setLocalTools((prev) => removeToolFromList(prev, tool.id));
   };
+
+  // Turn a tool's sub-options into separate tools inside a ribbon dropdown (all data is carried over)
+  const handleConvertToDropdown = (tool: ToolItem) => {
+    const count = tool.subOptions?.length ?? 0;
+    if (count === 0) return;
+    const nameJa = tool.name.ja;
+    const nameEn = tool.name.en || tool.name.ja;
+    const msg = lang === 'ja'
+      ? `「${nameJa}」のサブ機能 ${count} 件を、ドロップダウン内の独立したツールに変換します。\n\n` +
+        `・ドロップダウン名: 「${nameJa}」（グルーピングはそのまま）\n` +
+        `・中身: 「${nameJa}」＋サブ機能 ${count} 件 ＝ ${count + 1} ツール\n` +
+        `・各サブ機能の内容（説明・ショートカット・プレビュー等）はそのまま引き継がれます。\n\n` +
+        `（「保存して適用」を押すと反映されます）`
+      : `Convert the ${count} sub-options of "${nameEn}" into separate tools inside a ribbon dropdown?\n\n` +
+        `• Dropdown name: "${nameEn}" (same grouping)\n` +
+        `• Contents: "${nameEn}" + ${count} sub-options = ${count + 1} tools\n` +
+        `• All sub-option data (descriptions, shortcut, previews...) is carried over.\n\n` +
+        `(Applied when you press Save & Apply)`;
+    if (!window.confirm(msg)) return;
+    setLocalTools((prev) => convertSubOptionsToDropdown(prev, tool.id));
+  };
+
+  const renderConvertButton = (tool: ToolItem) =>
+    tool.subOptions && tool.subOptions.length > 0 ? (
+      <button
+        type="button"
+        onClick={() => handleConvertToDropdown(tool)}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 hover:border-sky-500 text-[10px] font-bold transition cursor-pointer shrink-0"
+        title={lang === 'ja'
+          ? `サブ機能 ${tool.subOptions.length} 件を、ドロップダウン内のツールに変換`
+          : `Convert ${tool.subOptions.length} sub-options into dropdown tools`}
+      >
+        <Layers className="w-3 h-3" />
+        <span>{lang === 'ja' ? `ドロップダウン化 (${tool.subOptions.length})` : `To dropdown (${tool.subOptions.length})`}</span>
+      </button>
+    ) : null;
 
   const renderDeleteButton = (tool: ToolItem) => (
     <button
@@ -1282,6 +1318,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                 tIdx < gTools.length - 1
                               )}
 
+                              {renderConvertButton(t)}
+
                               {renderDeleteButton(t)}
 
                               {/* Move tool to another group selector */}
@@ -1675,6 +1713,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   idx < groupTools.length - 1
                                 )}
 
+                                {renderConvertButton(gt)}
+
                                 {renderDeleteButton(gt)}
 
                                 {!gt.isDropdownTrigger && (
@@ -1756,6 +1796,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           sIdx > 0,
                           sIdx < standaloneTools.length - 1
                         )}
+
+                        {renderConvertButton(st)}
 
                         {renderDeleteButton(st)}
 
