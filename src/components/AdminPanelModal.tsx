@@ -1,5 +1,5 @@
 import { removeToolFromList, convertSubOptionsToDropdown } from '../lib/toolOps';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CategoryInfo, CompanySettings, Language, SupabaseConfig, ToolItem } from '../types/manual';
 import { 
   X, Check, Plus, Trash2, ArrowUp, ArrowDown, Sliders, 
@@ -112,6 +112,33 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [newDropdownNameEn, setNewDropdownNameEn] = useState('');
   const [newDropdownSubgroupJa, setNewDropdownSubgroupJa] = useState('壁ツール');
   const [newDropdownSubgroupEn, setNewDropdownSubgroupEn] = useState('Wall Tools');
+
+  // The panel stays mounted for the whole visit and its working copies were only created once
+  // (at page load). Refresh them EVERY time the panel opens, otherwise "Save & Apply" writes back
+  // that old copy and wipes everything uploaded or edited since.
+  useEffect(() => {
+    if (!isOpen) return;
+    setLocalCategories(categories);
+    setLocalTools(tools);
+    setSelectedCatId((prev) =>
+      categories.some((c) => c.id === prev) ? prev : categories.length > 0 ? categories[0].id : 'architecture'
+    );
+    setPreviewTitleJa(companySettings.defaultPreviewBoxTitleJa || 'プレビューツール');
+    setPreviewTitleEn(companySettings.defaultPreviewBoxTitleEn || 'Preview Tool');
+    setCompanyJa(companySettings.nameJa);
+    setCompanyEn(companySettings.nameEn);
+    setDeptJa(companySettings.departmentJa);
+    setDeptEn(companySettings.departmentEn);
+    setWelcomeJa(companySettings.welcomeNoticeJa);
+    setWelcomeEn(companySettings.welcomeNoticeEn);
+    // drop half-finished inline edits from the last time
+    setEditingDropdownConfigId(null);
+    setEditingGroupJa(null);
+    setIsCreatingGroup(false);
+    setQuickAddDropdownId(null);
+    setIsCreatingDropdown(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
