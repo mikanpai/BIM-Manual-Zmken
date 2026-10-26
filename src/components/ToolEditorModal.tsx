@@ -496,10 +496,26 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
       return;
     }
 
+    // Fields this form does not show (dropdown membership, phase, ...) must survive an edit.
+    // The dropdown only makes sense inside the same tab + same grouping, so it is released
+    // only when the tool is moved to a different tab or grouping.
+    const nextSubgroup = { ja: subgroupJa || '一般', en: subgroupEn || 'General' };
+    const movedElsewhere = !!tool && (tool.categoryId !== categoryId || tool.subgroup?.ja !== nextSubgroup.ja);
+    const preserved: Partial<ToolItem> = tool ? { ...tool } : {};
+    if (movedElsewhere) {
+      delete preserved.dropdownGroup;
+      delete preserved.dropdownGroupName;
+      delete preserved.dropdownSection;
+      delete preserved.isDropdownTrigger;
+      delete preserved.dropdownGroupIconType;
+      delete preserved.dropdownGroupCustomIconUrl;
+    }
+
     const savedTool: ToolItem = {
+      ...preserved,
       id: tool ? tool.id : `custom-tool-${Date.now()}`,
       categoryId,
-      subgroup: { ja: subgroupJa || '一般', en: subgroupEn || 'General' },
+      subgroup: nextSubgroup,
       name: { ja: nameJa.trim(), en: nameEn.trim() || nameJa.trim() },
       shortDesc: { 
         ja: shortDescJa.trim() || 'GLOOBEコマンドの説明', 
