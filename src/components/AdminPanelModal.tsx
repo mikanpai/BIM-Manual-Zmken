@@ -5,7 +5,7 @@ import {
   X, Check, Plus, Trash2, ArrowUp, ArrowDown, Sliders, 
   Building2, Layers, Film, RotateCcw, Download, Upload, ShieldCheck, Sparkles,
   ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Edit3, ArrowRight, CornerDownRight, Box, FolderPlus,
-  Database, Copy, CheckCircle2, AlertCircle, RefreshCw, Palette, Lock
+  Database, Copy, CheckCircle2, AlertCircle, RefreshCw, Palette, Lock, GripVertical
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
 import { 
@@ -29,6 +29,45 @@ interface AdminPanelModalProps {
   initialTab?: 'categories' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase';
   lang: Language;
 }
+
+
+// Small "type a number to jump there" box used next to the order arrows.
+// Uncontrolled + keyed by position so it resets itself whenever the order changes.
+const PositionInput: React.FC<{
+  pos: number;
+  total: number;
+  onMoveTo: (newPos: number) => void;
+  title: string;
+}> = ({ pos, total, onMoveTo, title }) => (
+  <div className="flex items-center gap-0.5 shrink-0" title={title}>
+    <input
+      key={pos}
+      type="text"
+      inputMode="numeric"
+      defaultValue={pos}
+      onFocus={(e) => e.currentTarget.select()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          e.currentTarget.value = String(pos);
+          e.currentTarget.blur();
+        }
+      }}
+      onBlur={(e) => {
+        const n = parseInt(e.currentTarget.value, 10);
+        if (Number.isNaN(n)) {
+          e.currentTarget.value = String(pos);
+          return;
+        }
+        const clamped = Math.min(Math.max(n, 1), total);
+        if (clamped !== pos) onMoveTo(clamped);
+        else e.currentTarget.value = String(pos);
+      }}
+      className="w-9 px-1 py-0.5 text-center text-[11px] font-bold font-mono rounded border border-stone-300 bg-white focus:border-orange-500 focus:ring-1 focus:ring-orange-300 outline-none"
+    />
+    <span className="text-[10px] text-stone-400 font-mono">/{total}</span>
+  </div>
+);
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   isOpen,
@@ -140,7 +179,23 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
+  // Drag & drop reordering state
+  const [dragItem, setDragItem] = useState<{ scope: string; id: string } | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
   if (!isOpen) return null;
+
+  // Move a category straight to a typed position (1-based)
+  const moveCategoryTo = (index: number, newPos: number) => {
+    setLocalCategories((prev) => {
+      const to = Math.min(Math.max(newPos - 1, 0), prev.length - 1);
+      if (index < 0 || index >= prev.length || to === index) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  };
 
   // Move Category Up
   const moveCategoryUp = (index: number) => {
@@ -621,6 +676,83 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     });
   };
 
+  // Move a tool straight to a typed/dropped position among its peers (1-based)
+  const moveToolTo = (toolId: string, newPos: number, isPeer: (t: ToolItem) => boolean) => {
+    setLocalTools((prev) => {
+      const slots = prev.map((t, i) => (isPeer(t) ? i : -1)).filter((i) => i >= 0);
+      const peers = slots.map((i) => prev[i]);
+      const from = peers.findIndex((t) => t.id === toolId);
+      if (from < 0) return prev;
+      const to = Math.min(Math.max(newPos - 1, 0), peers.length - 1);
+      if (to === from) return prev;
+      const [item] = peers.splice(from, 1);
+      peers.splice(to, 0, item);
+      const next = [...prev];
+      slots.forEach((slot, i) => { next[slot] = peers[i]; });
+      return next;
+    });
+  };
+
+  // Move a ribbon group straight to a position inside the selected category (1-based)
+  const moveGroupTo = (groupKey: string, newPos: number) => {
+    setLocalTools((prev) => {
+      const inCat = prev.filter((t) => t.categoryId === selectedCatId);
+      const keys = Array.from(new Set(inCat.map((t) => t.subgroup.ja)));
+      const from = keys.indexOf(groupKey);
+      const to = Math.min(Math.max(newPos - 1, 0), keys.length - 1);
+      if (from < 0 || to === from) return prev;
+      const [k] = keys.splice(from, 1);
+      keys.splice(to, 0, k);
+      const reordered = keys.flatMap((key) => inCat.filter((t) => t.subgroup.ja === key));
+      let i = 0;
+      return prev.map((t) => (t.categoryId === selectedCatId ? reordered[i++] : t));
+    });
+  };
+
+  // Move a whole dropdown button straight to a position (1-based)
+  const moveDropdownGroupTo = (gId: string, newPos: number) => {
+    setLocalTools((prev) => {
+      const inCat = prev.filter((t) => t.categoryId === selectedCatId && t.dropdownGroup);
+      const ids = Array.from(new Set(inCat.map((t) => t.dropdownGroup as string)));
+      const from = ids.indexOf(gId);
+      const to = Math.min(Math.max(newPos - 1, 0), ids.length - 1);
+      if (from < 0 || to === from) return prev;
+      const [id] = ids.splice(from, 1);
+      ids.splice(to, 0, id);
+      const reordered = ids.flatMap((x) => inCat.filter((t) => t.dropdownGroup === x));
+      let i = 0;
+      return prev.map((t) => (t.categoryId === selectedCatId && t.dropdownGroup ? reordered[i++] : t));
+    });
+  };
+
+  // Drop-target props for a sortable row. `onDropOn` receives the id of the dragged item.
+  const dropProps = (scope: string, id: string, onDropOn: (draggedId: string) => void) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (dragItem && dragItem.scope === scope && dragItem.id !== id) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const k = `${scope}:${id}`;
+        if (dragOverKey !== k) setDragOverKey(k);
+      }
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node) && dragOverKey === `${scope}:${id}`) {
+        setDragOverKey(null);
+      }
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (dragItem && dragItem.scope === scope && dragItem.id !== id) {
+        e.preventDefault();
+        e.stopPropagation();
+        onDropOn(dragItem.id);
+      }
+      setDragItem(null);
+      setDragOverKey(null);
+    },
+  });
+  const dropRing = (scope: string, id: string) =>
+    dragOverKey === `${scope}:${id}` ? ' ring-2 ring-orange-400 bg-orange-50/60' : '';
+
   // Move a ribbon group (柱ツール, 梁ツール ...) left/right inside the selected category
   const moveGroupBy = (groupKey: string, direction: -1 | 1) => {
     setLocalTools((prev) => {
@@ -707,26 +839,59 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     </button>
   );
 
-  const renderOrderButtons = (onUp: () => void, onDown: () => void, canUp: boolean, canDown: boolean) => (
-    <div className="flex items-center gap-0.5 shrink-0">
-      <button
-        type="button"
-        onClick={onUp}
-        disabled={!canUp}
-        className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-        title={lang === 'ja' ? '前へ移動（左/上）' : 'Move earlier (left/up)'}
-      >
-        <ArrowUp className="w-3 h-3" />
-      </button>
-      <button
-        type="button"
-        onClick={onDown}
-        disabled={!canDown}
-        className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-        title={lang === 'ja' ? '後ろへ移動（右/下）' : 'Move later (right/down)'}
-      >
-        <ArrowDown className="w-3 h-3" />
-      </button>
+  const renderOrderButtons = (
+    onUp: () => void,
+    onDown: () => void,
+    canUp: boolean,
+    canDown: boolean,
+    extra?: { pos: number; total: number; onMoveTo: (newPos: number) => void; scope: string; id: string }
+  ) => (
+    <div className="flex items-center gap-1 shrink-0">
+      {extra && (
+        <span
+          draggable
+          onDragStart={(e) => {
+            setDragItem({ scope: extra.scope, id: extra.id });
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', extra.id);
+            const row = (e.currentTarget as HTMLElement).closest('[data-drag-row]');
+            if (row) e.dataTransfer.setDragImage(row as HTMLElement, 12, 12);
+          }}
+          onDragEnd={() => { setDragItem(null); setDragOverKey(null); }}
+          className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-grab active:cursor-grabbing"
+          title={lang === 'ja' ? 'ドラッグして並べ替え' : 'Drag to reorder'}
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </span>
+      )}
+      {extra && (
+        <PositionInput
+          pos={extra.pos}
+          total={extra.total}
+          onMoveTo={extra.onMoveTo}
+          title={lang === 'ja' ? '番号を入力してEnterで移動' : 'Type a number and press Enter to jump there'}
+        />
+      )}
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={onUp}
+          disabled={!canUp}
+          className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+          title={lang === 'ja' ? '前へ移動（左/上）' : 'Move earlier (left/up)'}
+        >
+          <ArrowUp className="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={onDown}
+          disabled={!canDown}
+          className="p-1 rounded border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+          title={lang === 'ja' ? '後ろへ移動（右/下）' : 'Move later (right/down)'}
+        >
+          <ArrowDown className="w-3 h-3" />
+        </button>
+      </div>
     </div>
   );
 
@@ -981,7 +1146,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     return (
                       <div
                         key={cat.id}
-                        className="p-3.5 rounded-xl border border-stone-200 bg-white hover:border-orange-300 transition space-y-3 shadow-2xs"
+                        data-drag-row="1"
+                        {...dropProps('cat', cat.id, (dragged) => moveCategoryTo(localCategories.findIndex((c) => c.id === dragged), idx + 1))}
+                        className={`p-3.5 rounded-xl border border-stone-200 bg-white hover:border-orange-300 transition space-y-3 shadow-2xs${dropRing('cat', cat.id)}`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
@@ -1000,24 +1167,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           </div>
 
                           <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => moveCategoryUp(idx)}
-                              disabled={idx === 0}
-                              className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-                              title={lang === 'ja' ? "上へ移動" : "Move Up"}
-                            >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => moveCategoryDown(idx)}
-                              disabled={idx === localCategories.length - 1}
-                              className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-600 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-                              title={lang === 'ja' ? "下へ移動" : "Move Down"}
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </button>
+                            {renderOrderButtons(
+                              () => moveCategoryUp(idx),
+                              () => moveCategoryDown(idx),
+                              idx > 0,
+                              idx < localCategories.length - 1,
+                              { pos: idx + 1, total: localCategories.length, onMoveTo: (n) => moveCategoryTo(idx, n), scope: 'cat', id: cat.id }
+                            )}
                             <button
                               type="button"
                               onClick={() => removeCategory(idx)}
@@ -1223,7 +1379,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     return (
                       <div
                         key={groupKey}
-                        className="rounded-2xl border-2 border-stone-200 bg-stone-50/40 p-4 space-y-3 shadow-xs hover:border-orange-300 transition"
+                        data-drag-row="1"
+                        {...dropProps('group', groupKey, (dragged) => moveGroupTo(dragged, gIdx + 1))}
+                        className={`rounded-2xl border-2 border-stone-200 bg-stone-50/40 p-4 space-y-3 shadow-xs hover:border-orange-300 transition${dropRing('group', groupKey)}`}
                       >
                         {/* Group Card Header */}
                         <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-stone-200">
@@ -1287,7 +1445,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               () => moveGroupBy(groupKey, -1),
                               () => moveGroupBy(groupKey, 1),
                               gIdx > 0,
-                              gIdx < gArr.length - 1
+                              gIdx < gArr.length - 1,
+                              { pos: gIdx + 1, total: gArr.length, onMoveTo: (n) => moveGroupTo(groupKey, n), scope: 'group', id: groupKey }
                             )}
                             {!isEditingThis && (
                               <button
@@ -1320,7 +1479,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           {gTools.map((t, tIdx) => (
                             <div
                               key={t.id}
-                              className="p-2.5 rounded-xl bg-white border border-stone-200 flex items-center justify-between gap-2 shadow-2xs"
+                              data-drag-row="1"
+                              {...dropProps(`gtool:${groupKey}`, t.id, (dragged) => moveToolTo(dragged, tIdx + 1, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey))}
+                              className={`p-2.5 rounded-xl bg-white border border-stone-200 flex items-center justify-between gap-2 shadow-2xs${dropRing(`gtool:${groupKey}`, t.id)}`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <div className="w-7 h-7 rounded-lg bg-stone-100 text-stone-700 flex items-center justify-center shrink-0 border border-stone-200">
@@ -1342,7 +1503,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                 () => moveToolBy(t.id, -1, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey),
                                 () => moveToolBy(t.id, 1, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey),
                                 tIdx > 0,
-                                tIdx < gTools.length - 1
+                                tIdx < gTools.length - 1,
+                                {
+                                  pos: tIdx + 1, total: gTools.length, scope: `gtool:${groupKey}`, id: t.id,
+                                  onMoveTo: (n) => moveToolTo(t.id, n, (x) => x.categoryId === selectedCatId && x.subgroup.ja === groupKey),
+                                }
                               )}
 
                               {renderConvertButton(t)}
@@ -1489,7 +1654,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     return (
                       <div
                         key={gId}
-                        className="rounded-2xl border-2 border-sky-300 bg-sky-50/30 p-4 space-y-3 shadow-xs"
+                        data-drag-row="1"
+                        {...dropProps('dd', gId, (dragged) => moveDropdownGroupTo(dragged, dgIdx + 1))}
+                        className={`rounded-2xl border-2 border-sky-300 bg-sky-50/30 p-4 space-y-3 shadow-xs${dropRing('dd', gId)}`}
                       >
                         {/* Group Header */}
                         <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-sky-200">
@@ -1519,7 +1686,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               () => moveDropdownGroupBy(gId, -1),
                               () => moveDropdownGroupBy(gId, 1),
                               dgIdx > 0,
-                              dgIdx < dropdownGroupIds.length - 1
+                              dgIdx < dropdownGroupIds.length - 1,
+                              { pos: dgIdx + 1, total: dropdownGroupIds.length, onMoveTo: (n) => moveDropdownGroupTo(gId, n), scope: 'dd', id: gId }
                             )}
                             {/* USER REQUESTED: Edit icon and label for dropdown button group */}
                             <button
@@ -1697,7 +1865,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           {groupTools.map((gt, idx) => (
                             <div
                               key={gt.id}
-                              className="p-3 rounded-xl bg-white border border-stone-200 hover:border-sky-400 flex items-center justify-between gap-3 transition shadow-2xs"
+                              data-drag-row="1"
+                              {...dropProps(`ddtool:${gId}`, gt.id, (dragged) => moveToolTo(dragged, idx + 1, (x) => x.dropdownGroup === gId))}
+                              className={`p-3 rounded-xl bg-white border border-stone-200 hover:border-sky-400 flex items-center justify-between gap-3 transition shadow-2xs${dropRing(`ddtool:${gId}`, gt.id)}`}
                             >
                               <div className="flex items-center gap-3 min-w-0">
                                 <span className="text-[10px] font-mono font-bold text-stone-400 w-4">
@@ -1737,7 +1907,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   () => moveToolBy(gt.id, -1, (x) => x.dropdownGroup === gId),
                                   () => moveToolBy(gt.id, 1, (x) => x.dropdownGroup === gId),
                                   idx > 0,
-                                  idx < groupTools.length - 1
+                                  idx < groupTools.length - 1,
+                                  {
+                                    pos: idx + 1, total: groupTools.length, scope: `ddtool:${gId}`, id: gt.id,
+                                    onMoveTo: (n) => moveToolTo(gt.id, n, (x) => x.dropdownGroup === gId),
+                                  }
                                 )}
 
                                 {renderConvertButton(gt)}
@@ -1794,7 +1968,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   {standaloneTools.map((st, sIdx) => (
                     <div
                       key={st.id}
-                      className="p-3.5 rounded-xl border border-stone-200 bg-white hover:border-orange-300 flex items-center justify-between gap-3 shadow-2xs transition"
+                      data-drag-row="1"
+                      {...dropProps('stool', st.id, (dragged) => moveToolTo(dragged, sIdx + 1, (x) => x.categoryId === selectedCatId && !x.dropdownGroup))}
+                      className={`p-3.5 rounded-xl border border-stone-200 bg-white hover:border-orange-300 flex items-center justify-between gap-3 shadow-2xs transition${dropRing('stool', st.id)}`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
@@ -1821,7 +1997,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           () => moveToolBy(st.id, -1, (x) => x.categoryId === selectedCatId && !x.dropdownGroup),
                           () => moveToolBy(st.id, 1, (x) => x.categoryId === selectedCatId && !x.dropdownGroup),
                           sIdx > 0,
-                          sIdx < standaloneTools.length - 1
+                          sIdx < standaloneTools.length - 1,
+                          {
+                            pos: sIdx + 1, total: standaloneTools.length, scope: 'stool', id: st.id,
+                            onMoveTo: (n) => moveToolTo(st.id, n, (x) => x.categoryId === selectedCatId && !x.dropdownGroup),
+                          }
                         )}
 
                         {renderConvertButton(st)}
