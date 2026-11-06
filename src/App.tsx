@@ -105,7 +105,7 @@ export default function App() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingTool, setEditingTool] = useState<ToolItem | null>(null);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [adminInitialTab, setAdminInitialTab] = useState<'categories' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase'>('categories');
+  const [adminInitialTab, setAdminInitialTab] = useState<'categories' | 'sort' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase'>('categories');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [lightboxData, setLightboxData] = useState<{
     isOpen: boolean;

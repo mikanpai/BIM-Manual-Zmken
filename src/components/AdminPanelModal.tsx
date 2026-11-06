@@ -5,7 +5,7 @@ import {
   X, Check, Plus, Trash2, ArrowUp, ArrowDown, Sliders, 
   Building2, Layers, Film, RotateCcw, Download, Upload, ShieldCheck, Sparkles,
   ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Edit3, ArrowRight, CornerDownRight, Box, FolderPlus,
-  Database, Copy, CheckCircle2, AlertCircle, RefreshCw, Palette, Lock, GripVertical
+  Database, Copy, CheckCircle2, AlertCircle, RefreshCw, Palette, Lock, GripVertical, ArrowUpDown
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
 import { 
@@ -26,7 +26,7 @@ interface AdminPanelModalProps {
   onExportJson: () => void;
   onImportJson: (file: File) => void;
   onResetDefault: () => void;
-  initialTab?: 'categories' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase';
+  initialTab?: 'categories' | 'sort' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase';
   lang: Language;
 }
 
@@ -85,7 +85,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   initialTab = 'categories',
   lang,
 }) => {
-  const [activeTab, setActiveTab] = useState<'categories' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'categories' | 'sort' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase'>(initialTab);
 
   // Categories local state
   const [localCategories, setLocalCategories] = useState<CategoryInfo[]>(categories);
@@ -753,6 +753,57 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const dropRing = (scope: string, id: string) =>
     dragOverKey === `${scope}:${id}` ? ' ring-2 ring-orange-400 bg-orange-50/60' : '';
 
+  // ---- Sort tab: only the TOP-LEVEL ribbon items of each group ------------
+  // A "unit" is either one standalone tool or one whole dropdown button
+  // (with all of its tools kept together, in their own inner order).
+  type RibbonUnit = { key: string; isDropdown: boolean; tools: ToolItem[]; trigger: ToolItem };
+
+  const buildUnits = (tools: ToolItem[]): RibbonUnit[] => {
+    const units: RibbonUnit[] = [];
+    const index = new Map<string, number>();
+    tools.forEach((t) => {
+      const key = t.dropdownGroup ? `dd:${t.dropdownGroup}` : `t:${t.id}`;
+      if (!index.has(key)) {
+        index.set(key, units.length);
+        units.push({ key, isDropdown: !!t.dropdownGroup, tools: [], trigger: t });
+      }
+      units[index.get(key)!].tools.push(t);
+    });
+    units.forEach((u) => {
+      u.trigger = u.tools.find((x) => x.isDropdownTrigger) || u.tools[0];
+    });
+    return units;
+  };
+
+  // Reorder one top-level item inside a ribbon group. `resolveTo` gets the current
+  // index and the item count and returns the wanted index (0-based).
+  const reorderRibbonItem = (
+    groupKey: string,
+    itemKey: string,
+    resolveTo: (from: number, count: number) => number
+  ) => {
+    setLocalTools((prev) => {
+      const slots = prev
+        .map((t, i) => (t.categoryId === selectedCatId && t.subgroup.ja === groupKey ? i : -1))
+        .filter((i) => i >= 0);
+      const units = buildUnits(slots.map((i) => prev[i]));
+      const from = units.findIndex((u) => u.key === itemKey);
+      if (from < 0) return prev;
+      const to = Math.min(Math.max(resolveTo(from, units.length), 0), units.length - 1);
+      if (to === from) return prev;
+      const [moved] = units.splice(from, 1);
+      units.splice(to, 0, moved);
+      const flat = units.flatMap((u) => u.tools);
+      const next = [...prev];
+      slots.forEach((slot, i) => { next[slot] = flat[i]; });
+      return next;
+    });
+  };
+  const moveRibbonItemTo = (groupKey: string, itemKey: string, newPos: number) =>
+    reorderRibbonItem(groupKey, itemKey, () => newPos - 1);
+  const moveRibbonItemBy = (groupKey: string, itemKey: string, delta: number) =>
+    reorderRibbonItem(groupKey, itemKey, (from) => from + delta);
+
   // Move a ribbon group (柱ツール, 梁ツール ...) left/right inside the selected category
   const moveGroupBy = (groupKey: string, direction: -1 | 1) => {
     setLocalTools((prev) => {
@@ -907,55 +958,64 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       icon: Layers,
     },
     {
-      id: 'ribbon_groupings' as const,
+      id: 'sort' as const,
       num: 2,
-      labelJa: '2. グループ編成（柱・梁・スラブ等）',
-      labelEn: '2. Tool Groupings (Column, Beam, Slab)',
+      labelJa: '2. 並べ替え（リボン表示順）',
+      labelEn: '2. Sort (Ribbon Order)',
+      shortJa: '並べ替え',
+      shortEn: 'Sort',
+      icon: ArrowUpDown,
+    },
+    {
+      id: 'ribbon_groupings' as const,
+      num: 3,
+      labelJa: '3. グループ編成（柱・梁・スラブ等）',
+      labelEn: '3. Tool Groupings (Column, Beam, Slab)',
       shortJa: 'グループ編成',
       shortEn: 'Groupings',
       icon: FolderPlus,
     },
     {
       id: 'ribbon_dropdowns' as const,
-      num: 3,
-      labelJa: '3. リボンボタン & ドロップダウン',
-      labelEn: '3. Ribbon Buttons & Dropdowns',
+      num: 4,
+      labelJa: '4. リボンボタン & ドロップダウン',
+      labelEn: '4. Ribbon Buttons & Dropdowns',
       shortJa: 'ドロップダウン',
       shortEn: 'Dropdowns',
       icon: ChevronDown,
     },
     {
       id: 'preview_tool' as const,
-      num: 4,
-      labelJa: '4. プレビューツール設定',
-      labelEn: '4. Preview Tool Defaults',
+      num: 5,
+      labelJa: '5. プレビューツール設定',
+      labelEn: '5. Preview Tool Defaults',
       shortJa: 'プレビュー',
       shortEn: 'Preview',
       icon: Film,
     },
     {
       id: 'company' as const,
-      num: 5,
-      labelJa: '5. 社名・通知設定',
-      labelEn: '5. Company Branding',
+      num: 6,
+      labelJa: '6. 社名・通知設定',
+      labelEn: '6. Company Branding',
       shortJa: '社名・通知',
       shortEn: 'Company',
       icon: Building2,
     },
     {
       id: 'backup' as const,
-      num: 6,
-      labelJa: '6. バックアップ & リセット',
-      labelEn: '6. Backup & Reset',
+      num: 7,
+      labelJa: '7. バックアップ & リセット',
+      labelEn: '7. Backup & Reset',
       shortJa: 'バックアップ',
       shortEn: 'Backup',
       icon: RotateCcw,
     },
     {
       id: 'supabase' as const,
-      num: 7,
-      labelJa: '7. Supabase 連携 & SQLスキーマ',
-      labelEn: '7. Supabase & SQL Schema',
+      num: 8,
+      labelJa: '8. Supabase 連携 & SQLスキーマ',
+      labelEn: '8. Supabase & SQL Schema',
       shortJa: 'Supabase & SQL',
       shortEn: 'Supabase',
       icon: Database,
@@ -1220,6 +1280,156 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           )}
 
           {/* TAB 2: RIBBON GROUPINGS (USER REQUESTED: edit grouping like column tools, beam tools, slab tools, etc.) */}
+          {activeTab === 'sort' && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl border border-orange-200 bg-orange-50/70 space-y-2">
+                <div className="font-bold text-orange-950 flex items-center gap-1.5 text-sm">
+                  <ArrowUpDown className="w-4 h-4 text-orange-600" />
+                  <span>{lang === 'ja' ? 'リボンの表示順をまとめて並べ替え' : 'Sort the ribbon in one place'}</span>
+                </div>
+                <p className="text-xs text-orange-900 leading-relaxed">
+                  {lang === 'ja'
+                    ? 'ここにはリボンに表示される「グループ」と「ボタン（ドロップダウン／単独ツール）」だけが表示されます。ドロップダウン内のツール順は別管理なので、ここでは触りません。番号を入力するか、ドラッグで移動できます。'
+                    : 'Only what you see on the ribbon is listed here: the groups and their buttons (dropdown buttons and standalone tools). The order of tools INSIDE a dropdown is managed separately and is not shown. Type a number or drag a row to move it.'}
+                </p>
+              </div>
+
+              {/* Category Selector Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <span className="text-xs font-bold text-stone-500 shrink-0">
+                  {lang === 'ja' ? 'カテゴリ選択:' : 'Category:'}
+                </span>
+                {localCategories.map((c) => {
+                  const isSel = selectedCatId === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCatId(c.id)}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-xs transition whitespace-nowrap ${
+                        isSel ? 'bg-orange-600 text-white shadow-xs' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                      }`}
+                    >
+                      {lang === 'ja' ? c.name.ja : c.name.en}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {Object.keys(categoryGroups).length === 0 ? (
+                <div className="p-8 text-center text-sm text-stone-500 border-2 border-dashed border-stone-200 rounded-xl">
+                  {lang === 'ja' ? 'このカテゴリにツールがありません。' : 'No tools in this category yet.'}
+                </div>
+              ) : (
+                <>
+                  {/* 1) Order of the ribbon groups themselves */}
+                  <div className="rounded-2xl border-2 border-stone-200 bg-white p-4 space-y-2">
+                    <div className="text-xs font-bold text-stone-700">
+                      {lang === 'ja' ? 'グループの順番（リボンの左 → 右）' : 'Group order (ribbon left → right)'}
+                    </div>
+                    {Object.entries(categoryGroups).map(([groupKey, groupObj], gIdx, gArr) => (
+                      <div
+                        key={groupKey}
+                        data-drag-row="1"
+                        {...dropProps('sortgroup', groupKey, (dragged) => moveGroupTo(dragged, gIdx + 1))}
+                        className={`px-3 py-2 rounded-xl border border-stone-200 bg-stone-50/60 flex items-center justify-between gap-3${dropRing('sortgroup', groupKey)}`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-bold text-sm text-stone-900 truncate">
+                            {lang === 'ja' ? groupObj.ja : groupObj.en}
+                          </span>
+                          <span className="text-[10px] text-stone-500 shrink-0">
+                            {lang === 'ja' ? `${buildUnits(groupObj.tools).length} ボタン` : `${buildUnits(groupObj.tools).length} buttons`}
+                          </span>
+                        </div>
+                        {renderOrderButtons(
+                          () => moveGroupBy(groupKey, -1),
+                          () => moveGroupBy(groupKey, 1),
+                          gIdx > 0,
+                          gIdx < gArr.length - 1,
+                          { pos: gIdx + 1, total: gArr.length, onMoveTo: (n) => moveGroupTo(groupKey, n), scope: 'sortgroup', id: groupKey }
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 2) Buttons inside each group: dropdown buttons + standalone tools only */}
+                  {Object.entries(categoryGroups).map(([groupKey, groupObj]) => {
+                    const units = buildUnits(groupObj.tools);
+                    return (
+                      <div key={groupKey} className="rounded-2xl border-2 border-stone-200 bg-stone-50/40 p-4 space-y-2">
+                        <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+                          <span className="font-bold text-sm text-stone-900">
+                            {lang === 'ja' ? groupObj.ja : groupObj.en}
+                          </span>
+                          <span className="text-[10px] text-stone-500">
+                            {lang === 'ja' ? `左 → 右 の順` : 'left → right'}
+                          </span>
+                        </div>
+                        {units.map((u, uIdx) => {
+                          const scope = `sortitem:${groupKey}`;
+                          const trig = u.trigger;
+                          const nameJa = u.isDropdown ? (trig.dropdownGroupName?.ja || u.key.slice(3)) : trig.name.ja;
+                          const nameEn = u.isDropdown ? (trig.dropdownGroupName?.en || trig.dropdownGroupName?.ja || u.key.slice(3)) : trig.name.en;
+                          return (
+                            <div
+                              key={u.key}
+                              data-drag-row="1"
+                              {...dropProps(scope, u.key, (dragged) => moveRibbonItemTo(groupKey, dragged, uIdx + 1))}
+                              className={`p-2.5 rounded-xl bg-white border flex items-center justify-between gap-3 shadow-2xs ${
+                                u.isDropdown ? 'border-sky-300' : 'border-stone-200'
+                              }${dropRing(scope, u.key)}`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-stone-50 border border-stone-200 flex items-center justify-center shrink-0">
+                                  <CadIcon
+                                    type={u.isDropdown ? (trig.dropdownGroupIconType || trig.iconType) : trig.iconType}
+                                    customIconUrl={u.isDropdown ? (trig.dropdownGroupCustomIconUrl || trig.customIconUrl) : trig.customIconUrl}
+                                    size={18}
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-sm text-stone-900 truncate">{lang === 'ja' ? nameJa : nameEn}</div>
+                                  <div className="flex items-center gap-1.5">
+                                    {u.isDropdown ? (
+                                      <span className="px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-900 text-[10px] font-bold">
+                                        {lang === 'ja' ? `ドロップダウン・${u.tools.length}ツール` : `Dropdown · ${u.tools.length} tools`}
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 text-[10px] font-bold">
+                                        {lang === 'ja' ? '単独ツール' : 'Standalone'}
+                                      </span>
+                                    )}
+                                    {u.isDropdown && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveTab('ribbon_dropdowns')}
+                                        className="text-[10px] text-sky-700 underline hover:text-sky-900 cursor-pointer"
+                                      >
+                                        {lang === 'ja' ? '中の順番を変更 →' : 'Sort inside →'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              {renderOrderButtons(
+                                () => moveRibbonItemBy(groupKey, u.key, -1),
+                                () => moveRibbonItemBy(groupKey, u.key, 1),
+                                uIdx > 0,
+                                uIdx < units.length - 1,
+                                { pos: uIdx + 1, total: units.length, onMoveTo: (n) => moveRibbonItemTo(groupKey, u.key, n), scope, id: u.key }
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          )}
+
           {activeTab === 'ribbon_groupings' && (
             <div className="space-y-6">
               {/* Guidance Banner */}
