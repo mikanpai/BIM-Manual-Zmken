@@ -28,25 +28,23 @@ const labelForTool = (tool: ToolItem, lang: Language) =>
 const labelForSubOption = (item: SubOptionItem, lang: Language) =>
   lang === 'ja' ? item.name.ja : item.name.en || item.name.ja;
 
-// All bubbles fan out in a 90-degree upper-left arc from the actual launcher.
-// Rings are separated by more than one bubble diameter, so they never collide.
+// Show at most ten bubbles at once. The previous implementation placed every
+// overflow item at the launcher when the viewport could not fit another ring.
+const PAGE_SIZE = 10;
 const makeRadialPositions = (count: number, width: number, height: number) => {
   const positions: { x: number; y: number; ring: number }[] = [];
+  const outer = Math.max(220, Math.min(360, width * 0.28, height * 0.4));
+  const inner = Math.max(112, outer - 110);
+  const rings = [
+    { radius: outer, capacity: 6, start: 185, end: 265 },
+    { radius: inner, capacity: 4, start: 193, end: 257 },
+  ];
   let remaining = count;
-  const maxRadius = Math.max(150, Math.min(420, width * 0.34, height * 0.48));
-  const radii = [maxRadius, maxRadius - 92, maxRadius - 184, maxRadius - 276, maxRadius - 368]
-    .filter((r) => r >= 132);
-  radii.forEach((radius, ring) => {
-    if (remaining <= 0) return;
-    const capacity = Math.max(2, Math.floor((Math.PI * radius / 2) / 88) + 1);
+  rings.forEach(({ radius, capacity, start, end }, ring) => {
     const amount = Math.min(remaining, capacity);
     for (let i = 0; i < amount; i += 1) {
-      const angle = Math.PI + (Math.PI / 2) * ((i + 0.5) / amount);
-      positions.push({
-        x: Math.cos(angle) * radius - 36,
-        y: Math.sin(angle) * radius - 36,
-        ring,
-      });
+      const angle = (start + ((end - start) * (i + 0.5)) / amount) * Math.PI / 180;
+      positions.push({ x: Math.cos(angle) * radius - 36, y: Math.sin(angle) * radius - 36, ring });
     }
     remaining -= amount;
   });
@@ -64,6 +62,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [stack, setStack] = useState<RadialEntry[]>([]);
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -141,6 +140,9 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   }
 
   const currentNode = stack[stack.length - 1];
+  const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+  const visibleEntries = entries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  useEffect(() => { setPage(0); }, [stack.length, currentNode?.id]);
   const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   useEffect(() => {
@@ -149,7 +151,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
-  const positions = useMemo(() => makeRadialPositions(entries.length, viewport.width, viewport.height), [entries.length, viewport.width, viewport.height]);
+  const positions = useMemo(() => makeRadialPositions(visibleEntries.length, viewport.width, viewport.height), [visibleEntries.length, viewport.width, viewport.height]);
 
   const completeEntry = (entry: RadialEntry) => {
     setTransitioningId(null);
@@ -210,13 +212,13 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             />
-            {entries.map((entry, index) => {
+            {visibleEntries.map((entry, index) => {
               const p = positions[index] || { x: -36, y: -36, ring: 0 };
               const selected = transitioningId === entry.id;
               const transitioning = Boolean(transitioningId);
               return (
                 <motion.button
-                  key={`level-${stack.length}-${entry.id}`}
+                  key={`level-${stack.length}-page-${page}-${entry.id}`}
                   type="button"
                   onClick={() => selectEntry(entry)}
                   disabled={transitioning}
@@ -254,6 +256,13 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                 </motion.button>
               );
             })}
+            {pageCount > 1 && (
+              <div className="pointer-events-auto fixed bottom-5 right-[104px] z-[91] flex items-center gap-2 rounded-full border border-white/70 bg-white/95 px-2 py-1.5 text-xs font-semibold text-stone-700 shadow-lg">
+                <button type="button" disabled={page === 0 || Boolean(transitioningId)} onClick={() => setPage((p) => Math.max(0, p - 1))} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-orange-50 disabled:opacity-30" aria-label="Previous tools"><ChevronLeft className="h-4 w-4" /></button>
+                <span className="min-w-[34px] text-center tabular-nums">{page + 1} / {pageCount}</span>
+                <button type="button" disabled={page >= pageCount - 1 || Boolean(transitioningId)} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-orange-50 disabled:opacity-30" aria-label="Next tools"><ChevronLeft className="h-4 w-4 rotate-180" /></button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
