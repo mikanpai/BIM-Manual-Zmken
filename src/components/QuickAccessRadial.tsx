@@ -32,42 +32,31 @@ const labelForSubOption = (item: SubOptionItem, lang: Language) =>
 // around the central hub. Each page is capped to the available collision-free slots.
 const PAGE_SIZE = 48;
 const makeRadialPositions = (count: number, width: number, height: number) => {
-  const positions: { x: number; y: number; ring: number }[] = [];
-  const outer = Math.max(250, Math.min(350, width * 0.32, height * 0.40));
-  const rings = [
-    { radius: outer, capacity: Math.max(12, Math.floor((2 * Math.PI * outer) / 92)) },
-    { radius: outer - 94, capacity: Math.max(10, Math.floor((2 * Math.PI * (outer - 94)) / 92)) },
-    { radius: outer - 188, capacity: Math.max(8, Math.floor((2 * Math.PI * (outer - 188)) / 92)) },
-  ];
-  const activeRings = count <= rings[0].capacity
-    ? [rings[0]]
-    : count <= rings[0].capacity + rings[1].capacity
-      ? rings.slice(0, 2)
-      : rings;
-  const totalCapacity = activeRings.reduce((sum, ring) => sum + ring.capacity, 0);
-  let allocated = 0;
-  const allocations = activeRings.map((ring, index) => {
-    const amount = index === activeRings.length - 1
-      ? count - allocated
-      : Math.min(ring.capacity, Math.max(1, Math.round(count * ring.capacity / totalCapacity)));
-    allocated += amount;
-    return Math.min(amount, ring.capacity);
-  });
-  // If rounding left a few slots unallocated, fill them from the outside inward.
-  let remainder = count - allocations.reduce((sum, n) => sum + n, 0);
-  for (let i = 0; remainder > 0 && i < allocations.length; i += 1) {
-    const add = Math.min(remainder, activeRings[i].capacity - allocations[i]);
-    allocations[i] += add;
-    remainder -= add;
+  if (!count) return [];
+  const maxRadius = Math.max(190, Math.min(340, width * 0.29, height * 0.39));
+  if (count <= 6) {
+    const radius = count === 1 ? 138 : count <= 3 ? 160 : 190;
+    return Array.from({ length: count }, (_, i) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
+      return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, ring: 0 };
+    });
   }
-  activeRings.forEach(({ radius }, ringIndex) => {
-    const amount = allocations[ringIndex];
+  const rings = [
+    { radius: maxRadius, capacity: Math.max(12, Math.floor((2 * Math.PI * maxRadius) / 92)) },
+    { radius: maxRadius - 96, capacity: Math.max(10, Math.floor((2 * Math.PI * (maxRadius - 96)) / 92)) },
+    { radius: maxRadius - 192, capacity: Math.max(8, Math.floor((2 * Math.PI * (maxRadius - 192)) / 92)) },
+  ];
+  let remaining = count;
+  const allocations = rings.map(({ capacity }) => { const n = Math.min(remaining, capacity); remaining -= n; return n; });
+  const result: { x: number; y: number; ring: number }[] = [];
+  rings.forEach(({ radius }, ring) => {
+    const amount = allocations[ring];
     for (let i = 0; i < amount; i += 1) {
       const angle = -Math.PI / 2 + (2 * Math.PI * i) / amount;
-      positions.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, ring: ringIndex });
+      result.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, ring });
     }
   });
-  return positions;
+  return result;
 };
 
 export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
@@ -212,7 +201,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
 
   if (!enabled || hidden) return null;
   const spring = prefersReducedMotion ? { duration: 0.01 } : { type: 'spring' as const, stiffness: 310, damping: 25, mass: 0.72 };
-  const bubbleOrigin = { left: 'calc(50% - 36px)', top: 'calc(50% - 36px)' };
+  const bubbleOrigin = { left: '50%', top: '50%' };
 
   return (
     <>
@@ -300,15 +289,15 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           }
         }}
         className="fixed z-[90] flex flex-col items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-xl hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
-        style={{ left: 'calc(100% - 80px)', top: 'calc(100% - 80px)' }}
+        style={{ right: 24, bottom: 24, left: 'auto', top: 'auto' }}
         animate={{
-          left: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
-          top: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
+          x: isOpen ? 76 - viewport.width / 2 : 0,
+          y: isOpen ? 76 - viewport.height / 2 : 0,
           width: isOpen ? 104 : 56,
           height: isOpen ? 104 : 56,
           scale: 1,
           borderRadius: '9999px',
-          transition: prefersReducedMotion ? { duration: 0.01 } : { left: { type: 'spring', stiffness: 250, damping: 26 }, top: { type: 'spring', stiffness: 250, damping: 26 }, width: { type: 'spring', stiffness: 300, damping: 24 }, height: { type: 'spring', stiffness: 300, damping: 24 } },
+          transition: prefersReducedMotion ? { duration: 0.01 } : { x: { type: 'spring', stiffness: 250, damping: 26 }, y: { type: 'spring', stiffness: 250, damping: 26 }, width: { type: 'spring', stiffness: 300, damping: 24 }, height: { type: 'spring', stiffness: 300, damping: 24 } },
         }}
         aria-label={isOpen ? (stack.length ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')) : (lang === 'ja' ? 'クイックアクセスを開く' : 'Open quick access')}
         title={isOpen ? (stack.length ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')) : (lang === 'ja' ? 'クイックアクセスを開く（Alt+Q）' : 'Open quick access (Alt+Q)')}
