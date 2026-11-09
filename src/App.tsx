@@ -13,6 +13,7 @@ import {
 } from './data/defaultManual';
 import { Header } from './components/Header';
 import { RibbonBar } from './components/RibbonBar';
+import { QuickAccessRadial } from './components/QuickAccessRadial';
 import { MainMenuPage } from './components/MainMenuPage';
 import { ToolDetailPage } from './components/ToolDetailPage';
 import { SubOptionDetailPage } from './components/SubOptionDetailPage';
@@ -571,6 +572,27 @@ export default function App() {
         onNavigateHome={handleBackToList}
         isPaletteVisible={isRibbonPaletteVisible}
         lang={lang}
+      />
+
+      {/* Global radial quick access: available on the home page and every tool/manual screen. */}
+      <QuickAccessRadial
+        categories={categories}
+        tools={tools}
+        currentCategory={activeRibbonCategory}
+        lang={lang}
+        onSelectCategory={(categoryId) => {
+          setActiveRibbonCategory(categoryId);
+          setIsRibbonPaletteVisible(true);
+        }}
+        onSelectTool={(tool) => {
+          setActiveRibbonCategory(tool.categoryId);
+          handleSelectTool(tool);
+        }}
+        onSelectSubOption={(tool, subOption) => {
+          setActiveRibbonCategory(tool.categoryId);
+          handleSelectSubOption(tool, subOption);
+        }}
+        onNavigateHome={handleBackToList}
       />
 
       {/* 3. Main Body Content */}
