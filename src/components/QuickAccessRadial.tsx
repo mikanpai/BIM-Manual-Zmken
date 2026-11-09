@@ -24,6 +24,7 @@ interface QuickAccessRadialProps {
   onSelectTool: (tool: ToolItem) => void;
   onSelectSubOption: (tool: ToolItem, subOption: SubOptionItem) => void;
   onNavigateHome: () => void;
+  hidden?: boolean;
 }
 
 type RadialEntry =
@@ -48,6 +49,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   onSelectTool,
   onSelectSubOption,
   onNavigateHome,
+  hidden = false,
 }) => {
   const [enabled, setEnabled] = useState(() => {
     try {
@@ -84,16 +86,12 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   }, []);
 
   const selectedCategory = stack.find((entry) => entry.kind === 'category');
-  const activeCategoryId = selectedCategory?.kind === 'category'
-    ? selectedCategory.categoryId
-    : currentCategory;
-
-  const toolsToEntries = (categoryTools: ToolItem[]): RadialEntry[] => {
+  const toolsToEntries = (categoryTools: ToolItem[], includeDropdownGroups = true): RadialEntry[] => {
     const entries: RadialEntry[] = [];
     const handledGroups = new Set<string>();
 
     categoryTools.forEach((tool) => {
-      if (tool.dropdownGroup) {
+      if (includeDropdownGroups && tool.dropdownGroup) {
         if (handledGroups.has(tool.dropdownGroup)) return;
         handledGroups.add(tool.dropdownGroup);
         const groupTools = categoryTools.filter((item) => item.dropdownGroup === tool.dropdownGroup);
@@ -148,7 +146,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     if (current.kind === 'category') {
       entries = toolsToEntries(tools.filter((tool) => tool.categoryId === current.categoryId));
     } else if (current.kind === 'group') {
-      entries = toolsToEntries(current.tools);
+      entries = toolsToEntries(current.tools, false);
     } else if (current.kind === 'suboptions') {
       entries = current.subOptions.map((subOption) => ({
         kind: 'suboption',
@@ -164,8 +162,8 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   const currentNode = stack.length > 0 ? stack[stack.length - 1] : null;
   const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const centerDetail = currentNode?.detail || (lang === 'ja' ? 'リボンタブを選択' : 'Choose a ribbon tab');
-  const maxRadius = Math.max(112, Math.min(330, window.innerWidth * 0.39, window.innerHeight * 0.37));
-  const radius = Math.min(maxRadius, Math.max(118, entries.length * 10.5));
+  const maxRadius = Math.max(100, Math.min(300, window.innerWidth * 0.34, window.innerHeight * 0.30));
+  const radius = Math.min(maxRadius, Math.max(108, entries.length * 9));
 
   const handleEntryClick = (entry: RadialEntry) => {
     if (entry.kind === 'category') {
@@ -198,7 +196,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     setStack([]);
   };
 
-  if (!enabled) return null;
+  if (!enabled || hidden) return null;
 
   return (
     <>
