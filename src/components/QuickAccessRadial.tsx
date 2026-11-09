@@ -278,7 +278,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
             <div className="absolute inset-x-0 bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 px-5 py-4">
               <button
                 type="button"
-                onClick={onNavigateHome}
+                onClick={() => { onNavigateHome(); closeMenu(); }}
                 className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-2 text-[11px] font-semibold text-stone-600 hover:border-orange-300 hover:text-orange-700"
               >
                 <Home className="h-3.5 w-3.5" />
