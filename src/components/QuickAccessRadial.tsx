@@ -289,15 +289,15 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           }
         }}
         className="fixed z-[90] flex flex-col items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-xl hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
-        style={{ right: 24, bottom: 24, left: 'auto', top: 'auto' }}
+        style={{ left: 'calc(100% - 80px)', top: 'calc(100% - 80px)' }}
         animate={{
-          x: isOpen ? 76 - viewport.width / 2 : 0,
-          y: isOpen ? 76 - viewport.height / 2 : 0,
+          left: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
+          top: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
           width: isOpen ? 104 : 56,
           height: isOpen ? 104 : 56,
           scale: 1,
           borderRadius: '9999px',
-          transition: prefersReducedMotion ? { duration: 0.01 } : { x: { type: 'spring', stiffness: 250, damping: 26 }, y: { type: 'spring', stiffness: 250, damping: 26 }, width: { type: 'spring', stiffness: 300, damping: 24 }, height: { type: 'spring', stiffness: 300, damping: 24 } },
+          transition: prefersReducedMotion ? { duration: 0.01 } : { left: { type: 'spring', stiffness: 250, damping: 26 }, top: { type: 'spring', stiffness: 250, damping: 26 }, width: { type: 'spring', stiffness: 300, damping: 24 }, height: { type: 'spring', stiffness: 300, damping: 24 } },
         }}
         aria-label={isOpen ? (stack.length ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')) : (lang === 'ja' ? 'クイックアクセスを開く' : 'Open quick access')}
         title={isOpen ? (stack.length ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')) : (lang === 'ja' ? 'クイックアクセスを開く（Alt+Q）' : 'Open quick access (Alt+Q)')}
