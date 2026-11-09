@@ -593,6 +593,7 @@ export default function App() {
           handleSelectSubOption(tool, subOption);
         }}
         onNavigateHome={handleBackToList}
+        hidden={isEditorOpen || isAdminModalOpen || isCompanyModalOpen || lightboxData.isOpen || !!newSubOptionDraft}
       />
 
       {/* 3. Main Body Content */}
