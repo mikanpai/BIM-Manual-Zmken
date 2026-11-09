@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { CategoryInfo, Language, SubOptionItem, ToolItem } from '../types/manual';
 import { CadIcon } from './CadIcon';
-import { ChevronLeft, Command, Folder, Layers, EyeOff } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Command, Folder, EyeOff } from 'lucide-react';
 
 interface QuickAccessRadialProps {
   categories: CategoryInfo[];
@@ -16,7 +17,7 @@ interface QuickAccessRadialProps {
 
 type RadialEntry =
   | { kind: 'category'; id: string; label: string; detail: string; categoryId: string }
-  | { kind: 'group'; id: string; label: string; detail: string; tools: ToolItem[] }
+  | { kind: 'group'; id: string; label: string; detail: string; tools: ToolItem[]; iconTool: ToolItem }
   | { kind: 'suboptions'; id: string; label: string; detail: string; tool: ToolItem; subOptions: SubOptionItem[] }
   | { kind: 'tool'; id: string; label: string; detail: string; tool: ToolItem }
   | { kind: 'suboption'; id: string; label: string; detail: string; tool: ToolItem; subOption: SubOptionItem };
@@ -93,6 +94,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           label: lang === 'ja' ? groupName.ja : groupName.en || groupName.ja,
           detail: lang === 'ja' ? `${groupTools.length}件のツール` : `${groupTools.length} tools`,
           tools: groupTools,
+          iconTool: trigger,
         });
         return;
       }
@@ -202,16 +204,23 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                 title={entry.label}
                 className="pointer-events-auto absolute flex h-[76px] w-[76px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition duration-150 hover:scale-110 hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
-                <span className="flex h-7 w-7 items-center justify-center text-orange-700">
+                <span className="relative flex h-8 w-8 items-center justify-center text-orange-700">
                   {entry.kind === 'category'
                     ? <Folder className="h-5 w-5" />
                     : entry.kind === 'group'
-                      ? <Layers className="h-5 w-5" />
+                      ? <CadIcon type={entry.iconTool.iconType} customIconUrl={entry.iconTool.customIconUrl} size={25} />
                       : entry.kind === 'suboptions'
                         ? <ChevronLeft className="h-5 w-5 rotate-180" />
                         : <CadIcon type={entry.tool.iconType} customIconUrl={entry.tool.customIconUrl} size={20} />}
+                  {entry.kind === 'group' && (
+                    <span className="absolute -right-2 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-orange-500 text-white shadow-sm">
+                      <ChevronDown className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                  )}
                 </span>
-                <span className="line-clamp-2 w-full text-[10px] font-bold leading-tight">{entry.label}</span>
+                {entry.kind !== 'group' && (
+                  <span className="line-clamp-2 w-full text-[10px] font-bold leading-tight">{entry.label}</span>
+                )}
               </button>
             );
           })}
