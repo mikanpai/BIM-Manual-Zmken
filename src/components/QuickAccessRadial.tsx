@@ -28,22 +28,22 @@ const labelForTool = (tool: ToolItem, lang: Language) =>
 const labelForSubOption = (item: SubOptionItem, lang: Language) =>
   lang === 'ja' ? item.name.ja : item.name.en || item.name.ja;
 
-// Show at most ten bubbles at once. The previous implementation placed every
-// overflow item at the launcher when the viewport could not fit another ring.
-const PAGE_SIZE = 10;
+// Centered radial menu: concentric circles keep bubbles evenly spaced
+// around the central hub. Each page is capped to the available collision-free slots.
+const PAGE_SIZE = 48;
 const makeRadialPositions = (count: number, width: number, height: number) => {
   const positions: { x: number; y: number; ring: number }[] = [];
-  const outer = Math.max(220, Math.min(360, width * 0.28, height * 0.4));
-  const inner = Math.max(112, outer - 110);
+  const outer = Math.max(250, Math.min(350, width * 0.32, height * 0.40));
   const rings = [
-    { radius: outer, capacity: 6, start: 185, end: 265 },
-    { radius: inner, capacity: 4, start: 193, end: 257 },
+    { radius: outer, capacity: 22 },
+    { radius: outer - 94, capacity: 16 },
+    { radius: outer - 188, capacity: 10 },
   ];
   let remaining = count;
-  rings.forEach(({ radius, capacity, start, end }, ring) => {
+  rings.forEach(({ radius, capacity }, ring) => {
     const amount = Math.min(remaining, capacity);
     for (let i = 0; i < amount; i += 1) {
-      const angle = (start + ((end - start) * (i + 0.5)) / amount) * Math.PI / 180;
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / amount;
       positions.push({ x: Math.cos(angle) * radius - 36, y: Math.sin(angle) * radius - 36, ring });
     }
     remaining -= amount;
@@ -193,7 +193,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
 
   if (!enabled || hidden) return null;
   const spring = prefersReducedMotion ? { duration: 0.01 } : { type: 'spring' as const, stiffness: 310, damping: 25, mass: 0.72 };
-  const origin = { left: 'calc(100% - 28px)', top: 'calc(100% - 28px)' };
+  const bubbleOrigin = { left: '50%', top: '50%' };
 
   return (
     <>
@@ -238,7 +238,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                     x: -36, y: -36, opacity: 0, scale: 0.3,
                     transition: prefersReducedMotion ? spring : { duration: 0.22, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.01, 0.1) },
                   }}
-                  style={origin}
+                  style={bubbleOrigin}
                   className="pointer-events-auto absolute flex h-[72px] w-[72px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white px-1.5 text-center text-stone-800 shadow-[0_8px_24px_rgba(0,0,0,0.22)] hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
                   <span className="relative flex h-9 w-9 items-center justify-center text-orange-700">
@@ -281,13 +281,15 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           }
         }}
         className="fixed z-[90] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-xl hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
-        style={origin}
+        style={{ left: 'calc(100% - 28px)', top: 'calc(100% - 28px)' }}
         animate={{
+          left: isOpen ? '50%' : 'calc(100% - 28px)',
+          top: isOpen ? '50%' : 'calc(100% - 28px)',
           width: isOpen ? 104 : 56,
           height: isOpen ? 104 : 56,
-          scale: isOpen ? 1 : 1,
+          scale: 1,
           borderRadius: '9999px',
-          transition: prefersReducedMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 300, damping: 24 },
+          transition: prefersReducedMotion ? { duration: 0.01 } : { left: { type: 'spring', stiffness: 250, damping: 26 }, top: { type: 'spring', stiffness: 250, damping: 26 }, width: { type: 'spring', stiffness: 300, damping: 24 }, height: { type: 'spring', stiffness: 300, damping: 24 } },
         }}
         aria-label={isOpen ? (stack.length ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')) : (lang === 'ja' ? 'クイックアクセスを開く' : 'Open quick access')}
         title={isOpen ? (stack.length ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')) : (lang === 'ja' ? 'クイックアクセスを開く（Alt+Q）' : 'Open quick access (Alt+Q)')}
