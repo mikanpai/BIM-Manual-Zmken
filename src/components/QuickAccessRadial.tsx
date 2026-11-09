@@ -151,8 +151,27 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   const currentNode = stack.length > 0 ? stack[stack.length - 1] : null;
   const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const centerDetail = currentNode?.detail || (lang === 'ja' ? 'リボンタブを選択' : 'Choose a ribbon tab');
-  const viewportMin = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 700;
-  const radius = Math.max(105, Math.min(260, viewportMin * 0.34, 105 + entries.length * 5));
+  // Arrange choices in a roomy matrix around the fixed center instead of a crowded ring.
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const matrixColumns = viewportWidth >= 900 ? 5 : 3;
+  const matrixRows = Math.max(3, Math.ceil((entries.length + 1) / matrixColumns) + 1);
+  const centeredRows = matrixRows % 2 === 0 ? matrixRows + 1 : matrixRows;
+  const centerRow = Math.floor(centeredRows / 2);
+  const centerColumn = Math.floor(matrixColumns / 2);
+  const cellWidth = matrixColumns === 5 ? 122 : 106;
+  const cellHeight = Math.max(94, Math.min(120, (viewportHeight - 96) / centeredRows));
+  const matrixSlots = Array.from({ length: centeredRows * matrixColumns }, (_, index) => ({
+    row: Math.floor(index / matrixColumns),
+    column: index % matrixColumns,
+  }))
+    .filter((slot) => !(slot.row === centerRow && slot.column === centerColumn))
+    .sort((a, b) => {
+      const distanceA = Math.abs(a.row - centerRow) + Math.abs(a.column - centerColumn);
+      const distanceB = Math.abs(b.row - centerRow) + Math.abs(b.column - centerColumn);
+      return distanceA - distanceB || a.row - b.row || a.column - b.column;
+    })
+    .slice(0, entries.length);
 
   const handleEntryClick = (entry: RadialEntry) => {
     if (entry.kind === 'category') {
@@ -192,9 +211,9 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
       {isOpen && (
         <div className="fixed inset-0 z-[80] pointer-events-none" aria-label="Radial quick access">
           {entries.map((entry, index) => {
-            const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(entries.length, 1);
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
+            const slot = matrixSlots[index];
+            const x = (slot.column - centerColumn) * cellWidth;
+            const y = (slot.row - centerRow) * cellHeight;
             return (
               <button
                 key={entry.id}
@@ -202,9 +221,9 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                 onClick={() => handleEntryClick(entry)}
                 style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
                 title={entry.label}
-                className="pointer-events-auto absolute flex h-[76px] w-[76px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition duration-150 hover:scale-110 hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="pointer-events-auto absolute flex h-[84px] w-[84px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition duration-150 hover:scale-110 hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
-                <span className="relative flex h-8 w-8 items-center justify-center text-orange-700">
+                <span className="relative flex h-9 w-9 items-center justify-center text-orange-700">
                   {entry.kind === 'category'
                     ? <Folder className="h-5 w-5" />
                     : entry.kind === 'group'
@@ -219,7 +238,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                   )}
                 </span>
                 {entry.kind !== 'group' && (
-                  <span className="line-clamp-2 w-full text-[10px] font-bold leading-tight">{entry.label}</span>
+                  <span className="line-clamp-2 w-full text-[11px] font-bold leading-tight">{entry.label}</span>
                 )}
               </button>
             );
