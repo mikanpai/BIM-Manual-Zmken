@@ -259,5 +259,5 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
         </button>
       )}
     </>
-  );  );
+  );
 };
