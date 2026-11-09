@@ -35,18 +35,37 @@ const makeRadialPositions = (count: number, width: number, height: number) => {
   const positions: { x: number; y: number; ring: number }[] = [];
   const outer = Math.max(250, Math.min(350, width * 0.32, height * 0.40));
   const rings = [
-    { radius: outer, capacity: 22 },
-    { radius: outer - 94, capacity: 16 },
-    { radius: outer - 188, capacity: 10 },
+    { radius: outer, capacity: Math.max(12, Math.floor((2 * Math.PI * outer) / 92)) },
+    { radius: outer - 94, capacity: Math.max(10, Math.floor((2 * Math.PI * (outer - 94)) / 92)) },
+    { radius: outer - 188, capacity: Math.max(8, Math.floor((2 * Math.PI * (outer - 188)) / 92)) },
   ];
-  let remaining = count;
-  rings.forEach(({ radius, capacity }, ring) => {
-    const amount = Math.min(remaining, capacity);
+  const activeRings = count <= rings[0].capacity
+    ? [rings[0]]
+    : count <= rings[0].capacity + rings[1].capacity
+      ? rings.slice(0, 2)
+      : rings;
+  const totalCapacity = activeRings.reduce((sum, ring) => sum + ring.capacity, 0);
+  let allocated = 0;
+  const allocations = activeRings.map((ring, index) => {
+    const amount = index === activeRings.length - 1
+      ? count - allocated
+      : Math.min(ring.capacity, Math.max(1, Math.round(count * ring.capacity / totalCapacity)));
+    allocated += amount;
+    return Math.min(amount, ring.capacity);
+  });
+  // If rounding left a few slots unallocated, fill them from the outside inward.
+  let remainder = count - allocations.reduce((sum, n) => sum + n, 0);
+  for (let i = 0; remainder > 0 && i < allocations.length; i += 1) {
+    const add = Math.min(remainder, activeRings[i].capacity - allocations[i]);
+    allocations[i] += add;
+    remainder -= add;
+  }
+  activeRings.forEach(({ radius }, ringIndex) => {
+    const amount = allocations[ringIndex];
     for (let i = 0; i < amount; i += 1) {
       const angle = -Math.PI / 2 + (2 * Math.PI * i) / amount;
-      positions.push({ x: Math.cos(angle) * radius - 36, y: Math.sin(angle) * radius - 36, ring });
+      positions.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, ring: ringIndex });
     }
-    remaining -= amount;
   });
   return positions;
 };
@@ -193,7 +212,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
 
   if (!enabled || hidden) return null;
   const spring = prefersReducedMotion ? { duration: 0.01 } : { type: 'spring' as const, stiffness: 310, damping: 25, mass: 0.72 };
-  const bubbleOrigin = { left: '50%', top: '50%' };
+  const bubbleOrigin = { left: 'calc(50% - 36px)', top: 'calc(50% - 36px)' };
 
   return (
     <>
@@ -224,10 +243,10 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                   disabled={transitioning}
                   title={entry.label}
                   aria-label={entry.label}
-                  initial={{ x: -36, y: -36, opacity: 0, scale: 0.35 }}
+                  initial={{ x: 0, y: 0, opacity: 0, scale: 0.35 }}
                   animate={{
-                    x: selected || transitioning ? -36 : p.x,
-                    y: selected || transitioning ? -36 : p.y,
+                    x: selected || transitioning ? 0 : p.x,
+                    y: selected || transitioning ? 0 : p.y,
                     opacity: selected ? 1 : transitioning ? 0 : 1,
                     scale: selected ? 1.14 : transitioning ? 0.45 : 1,
                     transition: selected
@@ -235,7 +254,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                       : (prefersReducedMotion ? spring : { ...spring, delay: index * 0.018 }),
                   }}
                   exit={{
-                    x: -36, y: -36, opacity: 0, scale: 0.3,
+                    x: 0, y: 0, opacity: 0, scale: 0.3,
                     transition: prefersReducedMotion ? spring : { duration: 0.22, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.01, 0.1) },
                   }}
                   style={bubbleOrigin}
@@ -280,11 +299,11 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
             setIsOpen(true);
           }
         }}
-        className="fixed z-[90] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-xl hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
-        style={{ left: 'calc(100% - 28px)', top: 'calc(100% - 28px)' }}
+        className="fixed z-[90] flex flex-col items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-xl hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
+        style={{ left: 'calc(100% - 80px)', top: 'calc(100% - 80px)' }}
         animate={{
-          left: isOpen ? '50%' : 'calc(100% - 28px)',
-          top: isOpen ? '50%' : 'calc(100% - 28px)',
+          left: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
+          top: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
           width: isOpen ? 104 : 56,
           height: isOpen ? 104 : 56,
           scale: 1,
