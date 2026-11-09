@@ -1,19 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
-  CategoryInfo,
-  Language,
-  SubOptionItem,
-  ToolItem,
-} from '../types/manual';
 import { CadIcon } from './CadIcon';
-import {
-  ChevronLeft,
-  Command,
-  Folder,
-  Home,
-  Layers,
-  X,
-} from 'lucide-react';
+import { ChevronLeft, Command, Folder, Layers, EyeOff } from 'lucide-react';
 
 interface QuickAccessRadialProps {
   categories: CategoryInfo[];
@@ -162,8 +149,8 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   const currentNode = stack.length > 0 ? stack[stack.length - 1] : null;
   const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const centerDetail = currentNode?.detail || (lang === 'ja' ? 'リボンタブを選択' : 'Choose a ribbon tab');
-  const maxRadius = Math.max(100, Math.min(300, window.innerWidth * 0.34, window.innerHeight * 0.30));
-  const radius = Math.min(maxRadius, Math.max(108, entries.length * 9));
+  const viewportMin = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 700;
+  const radius = Math.max(105, Math.min(260, viewportMin * 0.34, 105 + entries.length * 5));
 
   const handleEntryClick = (entry: RadialEntry) => {
     if (entry.kind === 'category') {
@@ -201,110 +188,76 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   return (
     <>
       {isOpen && (
-        <div
-          className="fixed inset-0 z-[80] bg-stone-950/55 backdrop-blur-sm flex items-center justify-center p-3"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeMenu();
-          }}
-          role="presentation"
-        >
-          <div className="relative w-[min(94vw,780px)] h-[min(88vh,780px)] rounded-[2rem] border border-white/60 bg-white/95 shadow-2xl overflow-hidden">
-            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 py-4">
-              <div className="flex items-center gap-2 text-xs font-extrabold tracking-[0.18em] text-stone-500">
-                <Command className="w-4 h-4 text-orange-600" />
-                <span>GLOOBE QUICK ACCESS</span>
-              </div>
+        <div className="fixed inset-0 z-[80] pointer-events-none" aria-label="Radial quick access">
+          {entries.map((entry, index) => {
+            const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(entries.length, 1);
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            return (
               <button
+                key={entry.id}
                 type="button"
-                onClick={closeMenu}
-                className="rounded-full p-2 text-stone-500 hover:bg-stone-100 hover:text-stone-900"
-                aria-label={lang === 'ja' ? '閉じる' : 'Close'}
+                onClick={() => handleEntryClick(entry)}
+                style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
+                title={entry.label}
+                className="pointer-events-auto absolute flex h-[76px] w-[76px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition duration-150 hover:scale-110 hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="absolute inset-0">
-              {entries.map((entry, index) => {
-                const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(entries.length, 1);
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius + 8;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    onClick={() => handleEntryClick(entry)}
-                    style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
-                    className="absolute left-1/2 top-1/2 z-10 flex h-[68px] w-[76px] flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200 bg-white px-1.5 text-center shadow-md transition hover:-translate-y-1 hover:border-orange-400 hover:bg-orange-50 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-orange-700">
-                      {entry.kind === 'tool' && 'tool' in entry
-                        ? <CadIcon type={entry.tool.iconType} customIconUrl={entry.tool.customIconUrl} size={19} />
-                        : entry.kind === 'category'
-                          ? <Folder className="h-4 w-4" />
-                          : entry.kind === 'group'
-                            ? <Layers className="h-4 w-4" />
-                            : entry.kind === 'suboptions'
-                              ? <ChevronLeft className="h-4 w-4 rotate-180" />
-                              : <CadIcon type={entry.tool.iconType} customIconUrl={entry.tool.customIconUrl} size={19} />}
-                    </span>
-                    <span className="w-full truncate text-[10px] font-bold leading-tight text-stone-800">{entry.label}</span>
-                  </button>
-                );
-              })}
-
-              <div className="absolute left-1/2 top-1/2 z-20 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[5px] border-orange-200 bg-gradient-to-br from-orange-600 to-amber-500 px-3 text-center text-white shadow-xl">
-                <span className="mb-1 flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
-                  {stack.length === 0 ? <Command className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                <span className="flex h-7 w-7 items-center justify-center text-orange-700">
+                  {entry.kind === 'category'
+                    ? <Folder className="h-5 w-5" />
+                    : entry.kind === 'group'
+                      ? <Layers className="h-5 w-5" />
+                      : entry.kind === 'suboptions'
+                        ? <ChevronLeft className="h-5 w-5 rotate-180" />
+                        : <CadIcon type={entry.tool.iconType} customIconUrl={entry.tool.customIconUrl} size={20} />}
                 </span>
-                <span className="max-w-full line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
-                <span className="mt-1 text-[9px] text-white/80">{centerDetail}</span>
-                <button
-                  type="button"
-                  onClick={stack.length > 0 ? goBack : closeMenu}
-                  className="mt-1 rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-bold hover:bg-white/30"
-                >
-                  {stack.length > 0 ? (lang === 'ja' ? '戻る' : 'Back') : (lang === 'ja' ? '閉じる' : 'Close')}
-                </button>
-              </div>
-
-              {entries.length === 0 && (
-                <div className="absolute left-1/2 top-[calc(50%+112px)] -translate-x-1/2 rounded-xl bg-stone-100 px-4 py-2 text-center text-xs text-stone-500">
-                  {lang === 'ja' ? '項目がありません' : 'No items in this section'}
-                </div>
-              )}
-            </div>
-
-            <div className="absolute inset-x-0 bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 px-5 py-4">
-              <button
-                type="button"
-                onClick={() => { onNavigateHome(); closeMenu(); }}
-                className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-2 text-[11px] font-semibold text-stone-600 hover:border-orange-300 hover:text-orange-700"
-              >
-                <Home className="h-3.5 w-3.5" />
-                {lang === 'ja' ? 'マニュアル一覧' : 'Manual Home'}
+                <span className="line-clamp-2 w-full text-[10px] font-bold leading-tight">{entry.label}</span>
               </button>
-              <button
-                type="button"
-                onClick={() => { setEnabled(false); closeMenu(); }}
-                className="rounded-full border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-700 hover:bg-red-100"
-              >
-                {lang === 'ja' ? 'クイックアクセスを無効化（Alt+Qで復元）' : 'Disable Quick Access (restore with Alt+Q)'}
-              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={stack.length > 0 ? goBack : closeMenu}
+            title={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
+            className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition hover:scale-105"
+          >
+            {stack.length > 0 ? <ChevronLeft className="mb-1 h-5 w-5" /> : <Command className="mb-1 h-5 w-5" />}
+            <span className="line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
+            <span className="mt-1 text-[9px] text-orange-100">
+              {stack.length > 0 ? (lang === 'ja' ? '戻る' : 'Back') : (lang === 'ja' ? '閉じる' : 'Close')}
+            </span>
+          </button>
+
+          {entries.length === 0 && (
+            <div className="pointer-events-none absolute left-1/2 top-[calc(50%+76px)] -translate-x-1/2 text-center text-xs text-stone-500">
+              {lang === 'ja' ? '項目がありません' : 'No items'}
             </div>
-          </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => { setEnabled(false); closeMenu(); }}
+            title={lang === 'ja' ? 'クイックアクセスを無効化（Alt+Qで復元）' : 'Disable quick access (Alt+Q to restore)'}
+            aria-label={lang === 'ja' ? 'クイックアクセスを無効化' : 'Disable quick access'}
+            className="pointer-events-auto absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full border border-stone-300 bg-white/95 text-stone-600 shadow-md transition hover:border-red-400 hover:text-red-600"
+          >
+            <EyeOff className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => { setStack([]); setIsOpen(true); }}
-        className="fixed bottom-6 right-6 z-[70] flex h-14 w-14 items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-orange-600 to-amber-500 text-white shadow-xl shadow-orange-900/20 transition hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-orange-300"
-        title={lang === 'ja' ? 'クイックアクセスを開く（Alt+Qで表示/非表示）' : 'Open Quick Access (Alt+Q toggles visibility)'}
-        aria-label={lang === 'ja' ? 'クイックアクセスを開く' : 'Open Quick Access'}
-      >
-        <Command className="h-6 w-6" />
-      </button>
+      {!isOpen && (
+        <button
+          type="button"
+          onClick={() => { setStack([]); setIsOpen(true); }}
+          className="fixed bottom-6 right-6 z-[70] flex h-14 w-14 items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-lg transition hover:scale-110 hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
+          title={lang === 'ja' ? 'クイックアクセスを開く（Alt+Qで表示/非表示）' : 'Open quick access (Alt+Q toggles visibility)'}
+          aria-label={lang === 'ja' ? 'クイックアクセスを開く' : 'Open quick access'}
+        >
+          <Command className="h-6 w-6" />
+        </button>
+      )}
     </>
-  );
+  );  );
 };
