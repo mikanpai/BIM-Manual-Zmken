@@ -31,46 +31,47 @@ const labelForSubOption = (subOption: SubOptionItem, lang: Language) =>
 
 const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
-  const maxRadius = Math.max(118, Math.min(330, width * 0.405, height * 0.385));
-  const ringGap = 104;
-  const rings: number[] = [];
-  let remaining = count;
 
-  // Fill the outer ring first, then work inward. The spacing is based on
-  // circumference so neighboring bubbles retain a comfortable gap.
-  for (let radius = maxRadius; remaining > 0 && radius >= 116; radius -= ringGap) {
-    const capacity = Math.max(6, Math.floor((2 * Math.PI * radius) / 98));
-    const inRing = Math.min(remaining, capacity);
-    rings.push(radius);
-    remaining -= inRing;
+  // Keep small menus close to the hub. The previous fixed large radius made
+  // even a single category float hundreds of pixels away from the center.
+  const availableRadius = Math.max(108, Math.min(214, width * 0.29, height * 0.29));
+  const spacing = 84;
+  const desiredRadius = Math.max(108, (count * spacing) / (2 * Math.PI));
+  const radius = Math.min(availableRadius, desiredRadius);
+
+  // One compact ring handles the common category and dropdown-group cases.
+  if (count <= Math.max(6, Math.floor((2 * Math.PI * radius) / spacing))) {
+    return Array.from({ length: count }, (_, index) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * index) / count;
+      return {
+        x: Math.cos(angle) * radius - 36,
+        y: Math.sin(angle) * radius - 36,
+        ring: 0,
+      };
+    });
   }
 
-  // Very large tool groups get an additional compact ring rather than
-  // reverting to a grid or allowing bubbles to overlap.
-  while (remaining > 0) {
-    const radius = Math.max(116, rings[rings.length - 1] - ringGap);
-    rings.push(radius);
-    const capacity = Math.max(6, Math.floor((2 * Math.PI * radius) / 92));
-    remaining -= Math.min(remaining, capacity);
-  }
-
+  // Larger tool lists use compact concentric rings. Keep each ring's
+  // circumference proportional to its capacity to avoid crowding.
   const positions: { x: number; y: number; ring: number }[] = [];
-  let itemIndex = 0;
-  rings.forEach((radius, ringIndex) => {
-    if (itemIndex >= count) return;
-    const capacity = Math.max(6, Math.floor((2 * Math.PI * radius) / 98));
-    const ringCount = Math.min(count - itemIndex, capacity);
-    const startAngle = -Math.PI / 2 + (ringIndex % 2 ? Math.PI / ringCount : 0);
-    for (let i = 0; i < ringCount; i += 1) {
-      const angle = startAngle + (2 * Math.PI * i) / ringCount;
+  const ringRadii = [availableRadius, Math.max(108, availableRadius - 92), 108];
+  let remaining = count;
+  ringRadii.forEach((ringRadius, ringIndex) => {
+    if (remaining <= 0) return;
+    const capacity = Math.max(6, Math.floor((2 * Math.PI * ringRadius) / spacing));
+    const inRing = Math.min(remaining, capacity);
+    const startAngle = -Math.PI / 2 + (ringIndex % 2 ? Math.PI / inRing : 0);
+    for (let index = 0; index < inRing; index += 1) {
+      const angle = startAngle + (2 * Math.PI * index) / inRing;
       positions.push({
-        x: Math.cos(angle) * radius - 40,
-        y: Math.sin(angle) * radius - 40,
+        x: Math.cos(angle) * ringRadius - 36,
+        y: Math.sin(angle) * ringRadius - 36,
         ring: ringIndex,
       });
-      itemIndex += 1;
     }
+    remaining -= inRing;
   });
+
   return positions;
 };
 
@@ -287,7 +288,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                     transition: prefersReducedMotion ? spring : { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
                   }}
                   style={{ left: '50%', top: '50%' }}
-                  className="pointer-events-auto absolute flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition-colors hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="pointer-events-auto absolute flex h-[72px] w-[72px] flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition-colors hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
                   <span className="relative flex h-9 w-9 items-center justify-center text-orange-700">
                     {entry.kind === 'category'
@@ -304,7 +305,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                     )}
                   </span>
                   {entry.kind !== 'group' && (
-                    <span className="line-clamp-2 w-full text-[10px] font-bold leading-tight">{entry.label}</span>
+                    <span className="line-clamp-2 w-full text-[9px] font-bold leading-tight">{entry.label}</span>
                   )}
                 </motion.button>
               );
@@ -318,7 +319,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
             aria-label={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
             initial={prefersReducedMotion ? false : { scale: 0.82, opacity: 0 }}
             animate={{ scale: 1, opacity: 1, transition: spring }}
-            className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition-colors hover:bg-orange-500"
+            className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-26 w-26 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition-colors hover:bg-orange-500"
           >
             {stack.length > 0 ? <ChevronLeft className="mb-1 h-5 w-5" /> : <Command className="mb-1 h-5 w-5" />}
             <span className="line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
