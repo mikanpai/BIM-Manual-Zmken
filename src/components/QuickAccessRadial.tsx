@@ -32,46 +32,33 @@ const labelForSubOption = (subOption: SubOptionItem, lang: Language) =>
 const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
 
-  // Keep small menus close to the hub. The previous fixed large radius made
-  // even a single category float hundreds of pixels away from the center.
-  const availableRadius = Math.max(108, Math.min(214, width * 0.29, height * 0.29));
-  const spacing = 84;
-  const desiredRadius = Math.max(108, (count * spacing) / (2 * Math.PI));
-  const radius = Math.min(availableRadius, desiredRadius);
+  // Small groups stay close to the hub; larger groups expand only as needed.
+  const screenLimit = Math.max(112, Math.min(250, width * 0.30, height * 0.30));
+  const desiredRadius = count <= 4 ? 112 : count <= 8 ? 142 : count <= 14 ? 174 : count <= 22 ? 208 : 242;
+  const outerRadius = Math.min(screenLimit, desiredRadius);
+  const bubbleDiameter = 72;
+  const gap = 12;
+  const circumferenceSpacing = bubbleDiameter + gap;
 
-  // One compact ring handles the common category and dropdown-group cases.
-  if (count <= Math.max(6, Math.floor((2 * Math.PI * radius) / spacing))) {
-    return Array.from({ length: count }, (_, index) => {
-      const angle = -Math.PI / 2 + (2 * Math.PI * index) / count;
-      return {
-        x: Math.cos(angle) * radius - 36,
-        y: Math.sin(angle) * radius - 36,
-        ring: 0,
-      };
-    });
-  }
-
-  // Larger tool lists use compact concentric rings. Keep each ring's
-  // circumference proportional to its capacity to avoid crowding.
   const positions: { x: number; y: number; ring: number }[] = [];
-  const ringRadii = [availableRadius, Math.max(108, availableRadius - 92), 108];
   let remaining = count;
-  ringRadii.forEach((ringRadius, ringIndex) => {
-    if (remaining <= 0) return;
-    const capacity = Math.max(6, Math.floor((2 * Math.PI * ringRadius) / spacing));
+  let ring = 0;
+  while (remaining > 0 && ring < 5) {
+    const radius = Math.max(112, outerRadius - ring * 88);
+    const capacity = Math.max(6, Math.floor((2 * Math.PI * radius) / circumferenceSpacing));
     const inRing = Math.min(remaining, capacity);
-    const startAngle = -Math.PI / 2 + (ringIndex % 2 ? Math.PI / inRing : 0);
+    const startAngle = -Math.PI / 2 + (ring % 2 ? Math.PI / inRing : 0);
     for (let index = 0; index < inRing; index += 1) {
       const angle = startAngle + (2 * Math.PI * index) / inRing;
       positions.push({
-        x: Math.cos(angle) * ringRadius - 36,
-        y: Math.sin(angle) * ringRadius - 36,
-        ring: ringIndex,
+        x: Math.cos(angle) * radius - bubbleDiameter / 2,
+        y: Math.sin(angle) * radius - bubbleDiameter / 2,
+        ring,
       });
     }
     remaining -= inRing;
-  });
-
+    ring += 1;
+  }
   return positions;
 };
 
@@ -125,9 +112,8 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   }, []);
 
   const toolsToEntries = (categoryTools: ToolItem[], includeDropdownGroups = true): RadialEntry[] => {
-    const entries: RadialEntry[] = [];
+    const result: RadialEntry[] = [];
     const handledGroups = new Set<string>();
-
     categoryTools.forEach((tool) => {
       if (includeDropdownGroups && tool.dropdownGroup) {
         if (handledGroups.has(tool.dropdownGroup)) return;
@@ -138,7 +124,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           ja: trigger.name.ja.split('（')[0],
           en: trigger.name.en.split('(')[0],
         };
-        entries.push({
+        result.push({
           kind: 'group',
           id: `group:${tool.dropdownGroup}`,
           label: lang === 'ja' ? groupName.ja : groupName.en || groupName.ja,
@@ -148,9 +134,8 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
         });
         return;
       }
-
       if (tool.subOptions && tool.subOptions.length > 0) {
-        entries.push({
+        result.push({
           kind: 'suboptions',
           id: `suboptions:${tool.id}`,
           label: labelForTool(tool, lang),
@@ -159,7 +144,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           subOptions: tool.subOptions,
         });
       } else {
-        entries.push({
+        result.push({
           kind: 'tool',
           id: tool.id,
           label: labelForTool(tool, lang),
@@ -168,7 +153,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
         });
       }
     });
-    return entries;
+    return result;
   };
 
   let entries: RadialEntry[] = [];
@@ -200,9 +185,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
 
   const currentNode = stack.length > 0 ? stack[stack.length - 1] : null;
   const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
-  const centerDetail = currentNode?.detail || (lang === 'ja' ? 'リボンタブを選択' : 'Choose a ribbon tab');
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
-
   useEffect(() => {
     const updateViewport = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
     updateViewport();
@@ -215,25 +198,19 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     [entries.length, viewport.width, viewport.height],
   );
 
-  const handleEntryClick = (entry: RadialEntry) => {
-    setTransitioningId(entry.id);
+  const performEntryAction = (entry: RadialEntry) => {
+    setTransitioningId(null);
     if (entry.kind === 'category') {
       onSelectCategory(entry.categoryId);
       setStack((current) => [...current, entry]);
-      return;
-    }
-    if (entry.kind === 'group' || entry.kind === 'suboptions') {
+    } else if (entry.kind === 'group' || entry.kind === 'suboptions') {
       setStack((current) => [...current, entry]);
-      return;
-    }
-    if (entry.kind === 'tool') {
+    } else if (entry.kind === 'tool') {
       onSelectCategory(entry.tool.categoryId);
       onSelectTool(entry.tool);
       setIsOpen(false);
       setStack([]);
-      return;
-    }
-    if (entry.kind === 'suboption') {
+    } else if (entry.kind === 'suboption') {
       onSelectCategory(entry.tool.categoryId);
       onSelectSubOption(entry.tool, entry.subOption);
       setIsOpen(false);
@@ -241,10 +218,22 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     }
   };
 
-  const goBack = () => {
-    setTransitioningId('back');
-    setStack((current) => current.slice(0, -1));
+  const handleEntryClick = (entry: RadialEntry) => {
+    if (transitioningId) return;
+    setTransitioningId(entry.id);
+    // Let the clicked bubble visibly travel into the hub before changing levels.
+    window.setTimeout(() => performEntryAction(entry), prefersReducedMotion ? 0 : 260);
   };
+
+  const goBack = () => {
+    if (transitioningId) return;
+    setTransitioningId('back');
+    window.setTimeout(() => {
+      setTransitioningId(null);
+      setStack((current) => current.slice(0, -1));
+    }, prefersReducedMotion ? 0 : 180);
+  };
+
   const closeMenu = () => {
     setIsOpen(false);
     setStack([]);
@@ -252,10 +241,9 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   };
 
   if (!enabled || hidden) return null;
-
   const spring = prefersReducedMotion
     ? { duration: 0.01 }
-    : { type: 'spring' as const, stiffness: 270, damping: 23, mass: 0.82 };
+    : { type: 'spring' as const, stiffness: 300, damping: 25, mass: 0.72 };
 
   return (
     <>
@@ -263,29 +251,33 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
         <div className="fixed inset-0 z-[80] pointer-events-none" aria-label="Radial quick access">
           <AnimatePresence initial={false} mode="sync">
             {entries.map((entry, index) => {
-              const position = positions[index] || { x: 0, y: 0, ring: 0 };
+              const position = positions[index] || { x: -36, y: -36, ring: 0 };
               const isSelected = transitioningId === entry.id;
+              const isTransitioning = Boolean(transitioningId);
               return (
                 <motion.button
                   key={`level-${stack.length}-${entry.id}`}
                   type="button"
                   onClick={() => handleEntryClick(entry)}
+                  disabled={isTransitioning}
                   title={entry.label}
                   aria-label={entry.label}
-                  initial={{ x: -40, y: -40, opacity: 0, scale: 0.28 }}
+                  initial={{ x: -36, y: -36, opacity: 0, scale: 0.45 }}
                   animate={{
-                    x: position.x,
-                    y: position.y,
-                    opacity: 1,
-                    scale: 1,
-                    transition: prefersReducedMotion ? spring : { ...spring, delay: index * 0.035 },
+                    x: isSelected ? -36 : isTransitioning ? -36 : position.x,
+                    y: isSelected ? -36 : isTransitioning ? -36 : position.y,
+                    opacity: isSelected ? 1 : isTransitioning ? 0 : 1,
+                    scale: isSelected ? 1.16 : isTransitioning ? 0.55 : 1,
+                    transition: isSelected
+                      ? (prefersReducedMotion ? spring : { type: 'spring', stiffness: 320, damping: 22 })
+                      : (prefersReducedMotion ? spring : { ...spring, delay: index * 0.025 }),
                   }}
                   exit={{
-                    x: -40,
-                    y: -40,
-                    opacity: isSelected ? 0.15 : 0,
-                    scale: isSelected ? 0.72 : 0.48,
-                    transition: prefersReducedMotion ? spring : { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+                    x: -36,
+                    y: -36,
+                    opacity: 0,
+                    scale: 0.55,
+                    transition: prefersReducedMotion ? spring : { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
                   }}
                   style={{ left: '50%', top: '50%' }}
                   className="pointer-events-auto absolute flex h-[72px] w-[72px] flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition-colors hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -315,11 +307,12 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           <motion.button
             type="button"
             onClick={stack.length > 0 ? goBack : closeMenu}
+            disabled={Boolean(transitioningId)}
             title={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
             aria-label={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
             initial={prefersReducedMotion ? false : { scale: 0.82, opacity: 0 }}
             animate={{ scale: 1, opacity: 1, transition: spring }}
-            className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-26 w-26 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition-colors hover:bg-orange-500"
+            className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-[104px] w-[104px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition-colors hover:bg-orange-500"
           >
             {stack.length > 0 ? <ChevronLeft className="mb-1 h-5 w-5" /> : <Command className="mb-1 h-5 w-5" />}
             <span className="line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
