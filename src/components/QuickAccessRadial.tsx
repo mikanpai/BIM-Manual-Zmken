@@ -256,6 +256,13 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                 </motion.button>
               );
             })}
+            {pageCount > 1 && (
+              <div className="pointer-events-auto fixed bottom-5 right-[104px] z-[91] flex items-center gap-2 rounded-full border border-white/70 bg-white/95 px-2 py-1.5 text-xs font-semibold text-stone-700 shadow-lg">
+                <button type="button" disabled={page === 0 || Boolean(transitioningId)} onClick={() => setPage((p) => Math.max(0, p - 1))} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-orange-50 disabled:opacity-30" aria-label="Previous tools"><ChevronLeft className="h-4 w-4" /></button>
+                <span className="min-w-[34px] text-center tabular-nums">{page + 1} / {pageCount}</span>
+                <button type="button" disabled={page >= pageCount - 1 || Boolean(transitioningId)} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-orange-50 disabled:opacity-30" aria-label="Next tools"><ChevronLeft className="h-4 w-4 rotate-180" /></button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
