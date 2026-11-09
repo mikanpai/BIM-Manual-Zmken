@@ -29,36 +29,34 @@ const labelForTool = (tool: ToolItem, lang: Language) =>
 const labelForSubOption = (subOption: SubOptionItem, lang: Language) =>
   lang === 'ja' ? subOption.name.ja : subOption.name.en || subOption.name.ja;
 
+// A compact upper-half orbit anchored in the lower-right quadrant. This keeps
+// the ribbon and the manual's title/search area readable while retaining the
+// circular visual language. Extra items flow into a second, wider orbit.
 const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
-
-  // Small groups stay close to the hub; larger groups expand only as needed.
-  const screenLimit = Math.max(112, Math.min(250, width * 0.30, height * 0.30));
-  const desiredRadius = count <= 4 ? 112 : count <= 8 ? 142 : count <= 14 ? 174 : count <= 22 ? 208 : 242;
-  const outerRadius = Math.min(screenLimit, desiredRadius);
-  const bubbleDiameter = 72;
-  const gap = 12;
-  const circumferenceSpacing = bubbleDiameter + gap;
-
+  const outerRadius = Math.max(150, Math.min(230, width * 0.19, height * 0.27));
+  const innerRadius = Math.max(105, outerRadius - 92);
+  const diameter = 72;
+  const arcStart = Math.PI;
+  const arcSpan = Math.PI;
   const positions: { x: number; y: number; ring: number }[] = [];
   let remaining = count;
-  let ring = 0;
-  while (remaining > 0 && ring < 5) {
-    const radius = Math.max(112, outerRadius - ring * 88);
-    const capacity = Math.max(6, Math.floor((2 * Math.PI * radius) / circumferenceSpacing));
-    const inRing = Math.min(remaining, capacity);
-    const startAngle = -Math.PI / 2 + (ring % 2 ? Math.PI / inRing : 0);
-    for (let index = 0; index < inRing; index += 1) {
-      const angle = startAngle + (2 * Math.PI * index) / inRing;
+
+  [outerRadius, innerRadius, Math.max(92, innerRadius - 82)].forEach((radius, ring) => {
+    if (remaining <= 0) return;
+    const capacity = Math.max(3, Math.floor((Math.PI * radius) / 84) + 1);
+    const amount = Math.min(remaining, capacity);
+    for (let i = 0; i < amount; i += 1) {
+      const angle = arcStart + (arcSpan * (i + 0.5)) / amount;
       positions.push({
-        x: Math.cos(angle) * radius - bubbleDiameter / 2,
-        y: Math.sin(angle) * radius - bubbleDiameter / 2,
+        x: Math.cos(angle) * radius - diameter / 2,
+        y: Math.sin(angle) * radius - diameter / 2,
         ring,
       });
     }
-    remaining -= inRing;
-    ring += 1;
-  }
+    remaining -= amount;
+  });
+
   return positions;
 };
 
@@ -86,11 +84,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    try {
-      localStorage.setItem('gloobe_radial_quick_access_enabled', String(enabled));
-    } catch {
-      // The menu still works for this session if storage is unavailable.
-    }
+    try { localStorage.setItem('gloobe_radial_quick_access_enabled', String(enabled)); } catch { /* session-only fallback */ }
   }, [enabled]);
 
   useEffect(() => {
@@ -221,7 +215,6 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   const handleEntryClick = (entry: RadialEntry) => {
     if (transitioningId) return;
     setTransitioningId(entry.id);
-    // Let the clicked bubble visibly travel into the hub before changing levels.
     window.setTimeout(() => performEntryAction(entry), prefersReducedMotion ? 0 : 260);
   };
 
@@ -247,9 +240,16 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
 
   return (
     <>
-      {isOpen && (
-        <div className="fixed inset-0 z-[80] pointer-events-none" aria-label="Radial quick access">
-          <AnimatePresence initial={false} mode="sync">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            key="radial-menu"
+            className="fixed inset-0 z-[80] pointer-events-none"
+            aria-label="Radial quick access"
+            initial={prefersReducedMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, transition: { duration: 0.28 } }}
+          >
             {entries.map((entry, index) => {
               const position = positions[index] || { x: -36, y: -36, ring: 0 };
               const isSelected = transitioningId === entry.id;
@@ -262,24 +262,24 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                   disabled={isTransitioning}
                   title={entry.label}
                   aria-label={entry.label}
-                  initial={{ x: -36, y: -36, opacity: 0, scale: 0.45 }}
+                  initial={{ x: -36, y: -36, opacity: 0, scale: 0.35 }}
                   animate={{
                     x: isSelected ? -36 : isTransitioning ? -36 : position.x,
                     y: isSelected ? -36 : isTransitioning ? -36 : position.y,
                     opacity: isSelected ? 1 : isTransitioning ? 0 : 1,
-                    scale: isSelected ? 1.16 : isTransitioning ? 0.55 : 1,
+                    scale: isSelected ? 1.12 : isTransitioning ? 0.5 : 1,
                     transition: isSelected
                       ? (prefersReducedMotion ? spring : { type: 'spring', stiffness: 320, damping: 22 })
-                      : (prefersReducedMotion ? spring : { ...spring, delay: index * 0.025 }),
+                      : (prefersReducedMotion ? spring : { ...spring, delay: index * 0.018 }),
                   }}
                   exit={{
                     x: -36,
                     y: -36,
                     opacity: 0,
-                    scale: 0.55,
-                    transition: prefersReducedMotion ? spring : { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
+                    scale: 0.3,
+                    transition: prefersReducedMotion ? spring : { duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.012, 0.12) },
                   }}
-                  style={{ left: '50%', top: '50%' }}
+                  style={{ left: '84%', top: '84%' }}
                   className="pointer-events-auto absolute flex h-[72px] w-[72px] flex-col items-center justify-center gap-1 rounded-full border-2 border-orange-300 bg-white/95 px-1.5 text-center text-stone-800 shadow-lg transition-colors hover:border-orange-500 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
                   <span className="relative flex h-9 w-9 items-center justify-center text-orange-700">
@@ -302,42 +302,44 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                 </motion.button>
               );
             })}
-          </AnimatePresence>
 
-          <motion.button
-            type="button"
-            onClick={stack.length > 0 ? goBack : closeMenu}
-            disabled={Boolean(transitioningId)}
-            title={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
-            aria-label={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
-            initial={prefersReducedMotion ? false : { scale: 0.82, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1, transition: spring }}
-            className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-[104px] w-[104px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition-colors hover:bg-orange-500"
-          >
-            {stack.length > 0 ? <ChevronLeft className="mb-1 h-5 w-5" /> : <Command className="mb-1 h-5 w-5" />}
-            <span className="line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
-            <span className="mt-1 text-[9px] text-orange-100">
-              {stack.length > 0 ? (lang === 'ja' ? '戻る' : 'Back') : (lang === 'ja' ? '閉じる' : 'Close')}
-            </span>
-          </motion.button>
+            <motion.button
+              type="button"
+              onClick={stack.length > 0 ? goBack : closeMenu}
+              disabled={Boolean(transitioningId)}
+              title={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
+              aria-label={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
+              initial={prefersReducedMotion ? false : { scale: 0.65, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1, transition: spring }}
+              exit={prefersReducedMotion ? { opacity: 0 } : { scale: 0.55, opacity: 0, transition: { duration: 0.2 } }}
+              style={{ left: '84%', top: '84%' }}
+              className="pointer-events-auto absolute z-10 flex h-[104px] w-[104px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition-colors hover:bg-orange-500"
+            >
+              {stack.length > 0 ? <ChevronLeft className="mb-1 h-5 w-5" /> : <Command className="mb-1 h-5 w-5" />}
+              <span className="line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
+              <span className="mt-1 text-[9px] text-orange-100">
+                {stack.length > 0 ? (lang === 'ja' ? '戻る' : 'Back') : (lang === 'ja' ? '閉じる' : 'Close')}
+              </span>
+            </motion.button>
 
-          {entries.length === 0 && (
-            <div className="pointer-events-none absolute left-1/2 top-[calc(50%+76px)] -translate-x-1/2 text-center text-xs text-stone-500">
-              {lang === 'ja' ? '項目がありません' : 'No items'}
-            </div>
-          )}
+            {entries.length === 0 && (
+              <div className="pointer-events-none absolute left-[84%] top-[calc(84%+76px)] -translate-x-1/2 text-center text-xs text-stone-500">
+                {lang === 'ja' ? '項目がありません' : 'No items'}
+              </div>
+            )}
 
-          <button
-            type="button"
-            onClick={() => { setEnabled(false); closeMenu(); }}
-            title={lang === 'ja' ? 'クイックアクセスを無効化（Alt+Qで復元）' : 'Disable quick access (Alt+Q to restore)'}
-            aria-label={lang === 'ja' ? 'クイックアクセスを無効化' : 'Disable quick access'}
-            className="pointer-events-auto absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full border border-stone-300 bg-white/95 text-stone-600 shadow-md transition hover:border-red-400 hover:text-red-600"
-          >
-            <EyeOff className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => { setEnabled(false); closeMenu(); }}
+              title={lang === 'ja' ? 'クイックアクセスを無効化（Alt+Qで復元）' : 'Disable quick access (Alt+Q to restore)'}
+              aria-label={lang === 'ja' ? 'クイックアクセスを無効化' : 'Disable quick access'}
+              className="pointer-events-auto absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full border border-stone-300 bg-white/95 text-stone-600 shadow-md transition hover:border-red-400 hover:text-red-600"
+            >
+              <EyeOff className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {!isOpen && (
         <button
