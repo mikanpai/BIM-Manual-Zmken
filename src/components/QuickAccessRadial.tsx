@@ -30,33 +30,19 @@ const labelForSubOption = (item: SubOptionItem, lang: Language) =>
 
 // Centered radial menu: concentric circles keep bubbles evenly spaced
 // around the central hub. Each page is capped to the available collision-free slots.
-const PAGE_SIZE = 48;
+// Golden-angle sunflower layout: one continuous compact field, not separate rings.
+// The first bubbles sit just outside the hub; later bubbles fill the area organically.
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
-  const maxRadius = Math.max(190, Math.min(340, width * 0.29, height * 0.39));
-  if (count <= 6) {
-    const radius = count === 1 ? 138 : count <= 3 ? 160 : 190;
-    return Array.from({ length: count }, (_, i) => {
-      const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
-      return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, ring: 0 };
-    });
-  }
-  const rings = [
-    { radius: maxRadius, capacity: Math.max(12, Math.floor((2 * Math.PI * maxRadius) / 92)) },
-    { radius: maxRadius - 96, capacity: Math.max(10, Math.floor((2 * Math.PI * (maxRadius - 96)) / 92)) },
-    { radius: maxRadius - 192, capacity: Math.max(8, Math.floor((2 * Math.PI * (maxRadius - 192)) / 92)) },
-  ];
-  let remaining = count;
-  const allocations = rings.map(({ capacity }) => { const n = Math.min(remaining, capacity); remaining -= n; return n; });
-  const result: { x: number; y: number; ring: number }[] = [];
-  rings.forEach(({ radius }, ring) => {
-    const amount = allocations[ring];
-    for (let i = 0; i < amount; i += 1) {
-      const angle = -Math.PI / 2 + (2 * Math.PI * i) / amount;
-      result.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, ring });
-    }
+  const maxRadius = Math.max(82, Math.min(270, width / 2 - 48, height / 2 - 90));
+  const minRadius = 82;
+  return Array.from({ length: count }, (_, i) => {
+    const progress = (i + 0.5) / count;
+    const radius = Math.sqrt(minRadius * minRadius + (maxRadius * maxRadius - minRadius * minRadius) * progress);
+    const angle = -Math.PI / 2 + i * GOLDEN_ANGLE;
+    return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
   });
-  return result;
 };
 
 export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
@@ -148,8 +134,11 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   }
 
   const currentNode = stack[stack.length - 1];
-  const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
-  const visibleEntries = entries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const maxRadiusForPage = Math.max(82, Math.min(270, viewport.width / 2 - 48, viewport.height / 2 - 90));
+  // Keep the packing density comfortable on small screens; paginate rather than overlap.
+  const pageSize = Math.max(6, Math.min(30, Math.floor(0.72 * (maxRadiusForPage / 36) ** 2)));
+  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
+  const visibleEntries = entries.slice(page * pageSize, (page + 1) * pageSize);
   useEffect(() => { setPage(0); }, [stack.length, currentNode?.id]);
   const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
@@ -221,7 +210,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
               exit={{ opacity: 0 }}
             />
             {visibleEntries.map((entry, index) => {
-              const p = positions[index] || { x: -36, y: -36, ring: 0 };
+              const p = positions[index] || { x: -36, y: -36 };
               const selected = transitioningId === entry.id;
               const transitioning = Boolean(transitioningId);
               return (
