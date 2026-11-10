@@ -134,13 +134,6 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   }
 
   const currentNode = stack[stack.length - 1];
-  const maxRadiusForPage = Math.max(82, Math.min(270, viewport.width / 2 - 48, viewport.height / 2 - 90));
-  // Keep the packing density comfortable on small screens; paginate rather than overlap.
-  const pageSize = Math.max(6, Math.min(30, Math.floor(0.72 * (maxRadiusForPage / 36) ** 2)));
-  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
-  const visibleEntries = entries.slice(page * pageSize, (page + 1) * pageSize);
-  useEffect(() => { setPage(0); }, [stack.length, currentNode?.id]);
-  const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   useEffect(() => {
     const update = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
@@ -148,6 +141,13 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
+  const maxRadiusForPage = Math.max(82, Math.min(270, viewport.width / 2 - 48, viewport.height / 2 - 90));
+  // Keep the packing density comfortable on small screens; paginate rather than overlap.
+  const pageSize = Math.max(6, Math.min(30, Math.floor(0.72 * (maxRadiusForPage / 36) ** 2)));
+  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
+  const visibleEntries = entries.slice(page * pageSize, (page + 1) * pageSize);
+  useEffect(() => { setPage(0); }, [stack.length, currentNode?.id]);
+  const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const positions = useMemo(() => makeRadialPositions(visibleEntries.length, viewport.width, viewport.height), [visibleEntries.length, viewport.width, viewport.height]);
 
   const completeEntry = (entry: RadialEntry) => {
