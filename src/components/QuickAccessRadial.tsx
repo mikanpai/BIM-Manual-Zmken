@@ -28,21 +28,26 @@ const labelForTool = (tool: ToolItem, lang: Language) =>
 const labelForSubOption = (item: SubOptionItem, lang: Language) =>
   lang === 'ja' ? item.name.ja : item.name.en || item.name.ja;
 
-// Centered radial menu: concentric circles keep bubbles evenly spaced
-// around the central hub. Each page is capped to the available collision-free slots.
-// Golden-angle sunflower layout: one continuous compact field, not separate rings.
-// The first bubbles sit just outside the hub; later bubbles fill the area organically.
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+// Golden spiral: bubbles follow one continuous curve from the outside toward the hub.
+// The logarithmic growth uses the golden ratio (phi) for each quarter-turn.
+const GOLDEN_SPIRAL_B = (2 * Math.log((1 + Math.sqrt(5)) / 2)) / Math.PI;
+const BUBBLE_SPACING = 90;
 const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
-  const maxRadius = Math.max(82, Math.min(270, width / 2 - 48, height / 2 - 90));
-  const minRadius = Math.min(98, maxRadius * 0.88);
-  return Array.from({ length: count }, (_, i) => {
-    const progress = (i + 0.5) / count;
-    const radius = Math.sqrt(minRadius * minRadius + (maxRadius * maxRadius - minRadius * minRadius) * progress);
-    const angle = -Math.PI / 2 + i * GOLDEN_ANGLE;
-    return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+  const outerRadius = Math.max(112, Math.min(245, width / 2 - 60, height / 2 - 100));
+  const innerRadius = Math.min(104, outerRadius - 8);
+  const positions = Array.from({ length: count }, (_, i) => {
+    // Equal arc-length spacing keeps neighboring 72px bubbles comfortably separated.
+    const progress = count === 1 ? 0.5 : i / (count - 1);
+    const radius = outerRadius - (outerRadius - innerRadius) * progress;
+    const angle = Math.log(radius / innerRadius) / GOLDEN_SPIRAL_B;
+    const rotation = -Math.PI / 2;
+    return {
+      x: Math.cos(rotation - angle) * radius,
+      y: Math.sin(rotation - angle) * radius,
+    };
   });
+  return positions;
 };
 
 export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
@@ -141,9 +146,11 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
-  const maxRadiusForPage = Math.max(82, Math.min(270, viewport.width / 2 - 48, viewport.height / 2 - 90));
-  // Keep the packing density comfortable on small screens; paginate rather than overlap.
-  const pageSize = Math.max(6, Math.min(30, Math.floor(0.72 * (maxRadiusForPage / 36) ** 2)));
+  const outerRadiusForPage = Math.max(112, Math.min(245, viewport.width / 2 - 60, viewport.height / 2 - 100));
+  const innerRadiusForPage = Math.min(104, outerRadiusForPage - 8);
+  const spiralLengthForPage = ((outerRadiusForPage - innerRadiusForPage) * Math.sqrt(1 + GOLDEN_SPIRAL_B ** 2)) / GOLDEN_SPIRAL_B;
+  // One compact spiral only; paginate instead of adding another crowded turn or ring.
+  const pageSize = Math.max(1, Math.floor(spiralLengthForPage / BUBBLE_SPACING) + 1);
   const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
   const visibleEntries = entries.slice(page * pageSize, (page + 1) * pageSize);
   useEffect(() => { setPage(0); }, [stack.length, currentNode?.id]);
