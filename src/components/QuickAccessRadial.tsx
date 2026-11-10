@@ -30,24 +30,20 @@ const labelForSubOption = (item: SubOptionItem, lang: Language) =>
 
 // Golden spiral: bubbles follow one continuous curve from the outside toward the hub.
 // The logarithmic growth uses the golden ratio (phi) for each quarter-turn.
-const GOLDEN_SPIRAL_B = (2 * Math.log((1 + Math.sqrt(5)) / 2)) / Math.PI;
-const BUBBLE_SPACING = 90;
+// Golden-angle spiral: all entries occupy one connected, expanding spiral field.
+// The larger outer radius gives the full tool set room without pagination or rings.
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
-  const outerRadius = Math.max(112, Math.min(245, width / 2 - 60, height / 2 - 100));
-  const innerRadius = Math.min(104, outerRadius - 8);
-  const positions = Array.from({ length: count }, (_, i) => {
-    // Equal arc-length spacing keeps neighboring 72px bubbles comfortably separated.
-    const progress = count === 1 ? 0.5 : i / (count - 1);
-    const radius = outerRadius - (outerRadius - innerRadius) * progress;
-    const angle = Math.log(radius / innerRadius) / GOLDEN_SPIRAL_B;
-    const rotation = -Math.PI / 2;
-    return {
-      x: Math.cos(rotation - angle) * radius,
-      y: Math.sin(rotation - angle) * radius,
-    };
+  const outerRadius = Math.max(150, Math.min(350, width / 2 - 56, height / 2 - 56));
+  const innerRadius = Math.min(112, outerRadius * 0.42);
+  return Array.from({ length: count }, (_, i) => {
+    const progress = count === 1 ? 0.5 : (i + 0.5) / count;
+    const radius = Math.sqrt(innerRadius * innerRadius +
+      (outerRadius * outerRadius - innerRadius * innerRadius) * progress);
+    const angle = -Math.PI / 2 + i * GOLDEN_ANGLE;
+    return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
   });
-  return positions;
 };
 
 export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
@@ -61,7 +57,6 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [stack, setStack] = useState<RadialEntry[]>([]);
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -146,14 +141,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
-  const outerRadiusForPage = Math.max(112, Math.min(245, viewport.width / 2 - 60, viewport.height / 2 - 100));
-  const innerRadiusForPage = Math.min(104, outerRadiusForPage - 8);
-  const spiralLengthForPage = ((outerRadiusForPage - innerRadiusForPage) * Math.sqrt(1 + GOLDEN_SPIRAL_B ** 2)) / GOLDEN_SPIRAL_B;
-  // One compact spiral only; paginate instead of adding another crowded turn or ring.
-  const pageSize = Math.max(1, Math.floor(spiralLengthForPage / BUBBLE_SPACING) + 1);
-  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
-  const visibleEntries = entries.slice(page * pageSize, (page + 1) * pageSize);
-  useEffect(() => { setPage(0); }, [stack.length, currentNode?.id]);
+  const visibleEntries = entries;
   const centerLabel = currentNode?.label || (lang === 'ja' ? 'クイックアクセス' : 'Quick Access');
   const positions = useMemo(() => makeRadialPositions(visibleEntries.length, viewport.width, viewport.height), [visibleEntries.length, viewport.width, viewport.height]);
 
@@ -222,7 +210,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
               const transitioning = Boolean(transitioningId);
               return (
                 <motion.button
-                  key={`level-${stack.length}-page-${page}-${entry.id}`}
+                  key={`level-${stack.length}-${entry.id}`}
                   type="button"
                   onClick={() => selectEntry(entry)}
                   disabled={transitioning}
@@ -260,13 +248,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                 </motion.button>
               );
             })}
-            {pageCount > 1 && (
-              <div className="pointer-events-auto fixed bottom-5 right-[104px] z-[91] flex items-center gap-2 rounded-full border border-white/70 bg-white/95 px-2 py-1.5 text-xs font-semibold text-stone-700 shadow-lg">
-                <button type="button" disabled={page === 0 || Boolean(transitioningId)} onClick={() => setPage((p) => Math.max(0, p - 1))} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-orange-50 disabled:opacity-30" aria-label="Previous tools"><ChevronLeft className="h-4 w-4" /></button>
-                <span className="min-w-[34px] text-center tabular-nums">{page + 1} / {pageCount}</span>
-                <button type="button" disabled={page >= pageCount - 1 || Boolean(transitioningId)} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-orange-50 disabled:opacity-30" aria-label="Next tools"><ChevronLeft className="h-4 w-4 rotate-180" /></button>
-              </div>
-            )}
+
           </motion.div>
         )}
       </AnimatePresence>
