@@ -36,7 +36,7 @@ const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
   const maxRadius = Math.max(82, Math.min(270, width / 2 - 48, height / 2 - 90));
-  const minRadius = 82;
+  const minRadius = Math.min(98, maxRadius * 0.88);
   return Array.from({ length: count }, (_, i) => {
     const progress = (i + 0.5) / count;
     const radius = Math.sqrt(minRadius * minRadius + (maxRadius * maxRadius - minRadius * minRadius) * progress);
