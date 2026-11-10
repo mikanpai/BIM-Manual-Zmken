@@ -240,7 +240,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                     scale: selected ? 1.14 : transitioning ? 0.45 : 1,
                     transition: selected
                       ? (prefersReducedMotion ? spring : { type: 'spring', stiffness: 330, damping: 22 })
-                      : (prefersReducedMotion ? spring : { ...spring, delay: p.ring * 0.025 + (index % 6) * 0.008 }),
+                      : (prefersReducedMotion ? spring : { ...spring, delay: index * 0.018 }),
                   }}
                   exit={{
                     x: 0, y: 0, opacity: 0, scale: 0.3,
