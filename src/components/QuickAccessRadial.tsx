@@ -36,7 +36,6 @@ const makeRadialPositions = (count: number, width: number, height: number) => {
   if (!count) return [];
   const outerRadius = Math.max(112, Math.min(245, width / 2 - 60, height / 2 - 100));
   const innerRadius = Math.min(104, outerRadius - 8);
-  const spiralLength = ((outerRadius - innerRadius) * Math.sqrt(1 + GOLDEN_SPIRAL_B ** 2)) / GOLDEN_SPIRAL_B;
   const positions = Array.from({ length: count }, (_, i) => {
     // Equal arc-length spacing keeps neighboring 72px bubbles comfortably separated.
     const progress = count === 1 ? 0.5 : i / (count - 1);
