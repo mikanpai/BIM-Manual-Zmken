@@ -240,7 +240,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
                     scale: selected ? 1.14 : transitioning ? 0.45 : 1,
                     transition: selected
                       ? (prefersReducedMotion ? spring : { type: 'spring', stiffness: 330, damping: 22 })
-                      : (prefersReducedMotion ? spring : { ...spring, delay: index * 0.018 }),
+                      : (prefersReducedMotion ? spring : { ...spring, delay: p.ring * 0.025 + (index % 6) * 0.008 }),
                   }}
                   exit={{
                     x: 0, y: 0, opacity: 0, scale: 0.3,
@@ -289,10 +289,10 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
           }
         }}
         className="fixed z-[90] flex flex-col items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-xl hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
-        style={{ left: 'calc(100% - 80px)', top: 'calc(100% - 80px)' }}
+        style={{ left: viewport.width - 80, top: viewport.height - 80 }}
         animate={{
-          left: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
-          top: isOpen ? 'calc(50% - 52px)' : 'calc(100% - 80px)',
+          left: isOpen ? viewport.width / 2 - 52 : viewport.width - 80,
+          top: isOpen ? viewport.height / 2 - 52 : viewport.height - 80,
           width: isOpen ? 104 : 56,
           height: isOpen ? 104 : 56,
           scale: 1,
