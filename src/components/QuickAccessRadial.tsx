@@ -304,22 +304,7 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
             })}
           </AnimatePresence>
 
-          <motion.button
-            type="button"
-            onClick={stack.length > 0 ? goBack : closeMenu}
-            disabled={Boolean(transitioningId)}
-            title={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
-            aria-label={stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close')}
-            initial={prefersReducedMotion ? false : { scale: 0.82, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1, transition: spring }}
-            className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex h-[104px] w-[104px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl transition-colors hover:bg-orange-500"
-          >
-            {stack.length > 0 ? <ChevronLeft className="mb-1 h-5 w-5" /> : <Command className="mb-1 h-5 w-5" />}
-            <span className="line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
-            <span className="mt-1 text-[9px] text-orange-100">
-              {stack.length > 0 ? (lang === 'ja' ? '戻る' : 'Back') : (lang === 'ja' ? '閉じる' : 'Close')}
-            </span>
-          </motion.button>
+
 
           {entries.length === 0 && (
             <div className="pointer-events-none absolute left-1/2 top-[calc(50%+76px)] -translate-x-1/2 text-center text-xs text-stone-500">
@@ -339,17 +324,50 @@ export const QuickAccessRadial: React.FC<QuickAccessRadialProps> = ({
         </div>
       )}
 
-      {!isOpen && (
-        <button
-          type="button"
-          onClick={() => { setStack([]); setTransitioningId(null); setIsOpen(true); }}
-          className="fixed bottom-6 right-6 z-[70] flex h-14 w-14 items-center justify-center rounded-full border-2 border-white bg-orange-600 text-white shadow-lg transition hover:scale-110 hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
-          title={lang === 'ja' ? 'クイックアクセスを開く（Alt+Qで表示/非表示）' : 'Open quick access (Alt+Q toggles visibility)'}
-          aria-label={lang === 'ja' ? 'クイックアクセスを開く' : 'Open quick access'}
-        >
-          <Command className="h-6 w-6" />
-        </button>
-      )}
+      <motion.button
+        type="button"
+        onClick={() => {
+          if (isOpen) {
+            if (stack.length > 0) goBack();
+            else closeMenu();
+          } else {
+            setStack([]);
+            setTransitioningId(null);
+            setIsOpen(true);
+          }
+        }}
+        disabled={Boolean(transitioningId)}
+        title={isOpen
+          ? (stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close'))
+          : (lang === 'ja' ? 'クイックアクセスを開く（Alt+Qで表示/非表示）' : 'Open quick access (Alt+Q toggles visibility)')}
+        aria-label={isOpen
+          ? (stack.length > 0 ? (lang === 'ja' ? '一つ戻る' : 'Back one level') : (lang === 'ja' ? '閉じる' : 'Close'))
+          : (lang === 'ja' ? 'クイックアクセスを開く' : 'Open quick access')}
+        initial={false}
+        animate={{
+          left: isOpen ? viewport.width / 2 - 52 : viewport.width - 80,
+          top: isOpen ? viewport.height / 2 - 52 : viewport.height - 80,
+          width: isOpen ? 104 : 56,
+          height: isOpen ? 104 : 56,
+          scale: 1,
+          transition: prefersReducedMotion
+            ? { duration: 0.01 }
+            : { left: { type: 'spring', stiffness: 250, damping: 26 }, top: { type: 'spring', stiffness: 250, damping: 26 }, width: spring, height: spring },
+        }}
+        className="pointer-events-auto fixed z-[90] flex flex-col items-center justify-center rounded-full border-[3px] border-orange-500 bg-orange-600 px-3 text-center text-white shadow-xl hover:bg-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-300"
+      >
+        {isOpen
+          ? (stack.length > 0 ? <ChevronLeft className="mb-1 h-5 w-5" /> : <Command className="mb-1 h-5 w-5" />)
+          : <Command className="h-6 w-6" />}
+        {isOpen && (
+          <>
+            <span className="line-clamp-2 text-xs font-extrabold leading-tight">{centerLabel}</span>
+            <span className="mt-1 text-[9px] text-orange-100">
+              {stack.length > 0 ? (lang === 'ja' ? '戻る' : 'Back') : (lang === 'ja' ? '閉じる' : 'Close')}
+            </span>
+          </>
+        )}
+      </motion.button>
     </>
   );
 };
