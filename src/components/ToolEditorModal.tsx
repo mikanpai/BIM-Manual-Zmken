@@ -61,7 +61,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
 
   // Preview Tool Boxes (multiple boxes support with custom title, logo, tool name, gif)
   const [previewBoxes, setPreviewBoxes] = useState<PreviewBoxItem[]>(
-    tool?.previewBoxes && tool.previewBoxes.length > 0
+    tool?.previewBoxes !== undefined
       ? tool.previewBoxes
       : [
           {
@@ -136,7 +136,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
       setFullDescEn(tool.fullDesc?.en || tool.shortDesc?.en || tool.fullDesc?.ja || tool.shortDesc?.ja || '');
 
       setPreviewBoxes(
-        (tool.previewBoxes && tool.previewBoxes.length > 0
+        (tool.previewBoxes !== undefined
           ? tool.previewBoxes
           : [
               {
@@ -218,12 +218,12 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
       );
 
       const tipsJaList = tool.tips?.ja && tool.tips.ja.length > 0 ? tool.tips.ja : [''];
-      const tipsEnList = tool.tips?.en && tool.tips.en.length > 0 ? tool.tips.en : tipsJaList;
+      const tipsEnList = tipsJaList.map((tip, index) => tool.tips?.en?.[index] || tip);
       setTipsJa(tipsJaList);
       setTipsEn(tipsEnList);
 
       const warnJaList = tool.warnings?.ja && tool.warnings.ja.length > 0 ? tool.warnings.ja : [''];
-      const warnEnList = tool.warnings?.en && tool.warnings.en.length > 0 ? tool.warnings.en : warnJaList;
+      const warnEnList = warnJaList.map((warning, index) => tool.warnings?.en?.[index] || warning);
       setWarningsJa(warnJaList);
       setWarningsEn(warnEnList);
     } else {
@@ -325,11 +325,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   };
 
   const removePreviewBox = (index: number) => {
-    if (previewBoxes.length <= 1) {
-      alert(lang === 'ja' ? '最低1つのプレビューボックスが必要です。' : 'At least one preview box is required.');
-      return;
-    }
-    setPreviewBoxes(previewBoxes.filter((_, i) => i !== index));
+    setPreviewBoxes((current) => current.filter((_, i) => i !== index));
   };
 
   const updatePreviewBox = (index: number, field: string, value: string) => {
@@ -529,18 +525,20 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
       iconType,
       customIconUrl: customIconUrl.trim() || undefined,
       simulatorGifUrl: simulatorGifUrl.trim() || undefined,
-      previewBoxes: previewBoxes.length > 0 ? previewBoxes : undefined,
+      previewBoxes,
       subOptions: subOptions.length > 0 ? subOptions : undefined,
       steps: steps.filter((s) => s.title.ja.trim() || s.instruction.ja.trim()),
       media: mediaList,
-      tips: {
-        ja: tipsJa.filter(t => t.trim().length > 0),
-        en: tipsEn.filter(t => t.trim().length > 0)
-      },
-      warnings: {
-        ja: warningsJa.filter(w => w.trim().length > 0),
-        en: warningsEn.filter(w => w.trim().length > 0)
-      },
+      tips: (() => {
+        const paired = tipsJa.map((ja, index) => ({ ja, en: tipsEn[index] || '' }))
+          .filter((item) => item.ja.trim() || item.en.trim());
+        return { ja: paired.map((item) => item.ja), en: paired.map((item) => item.en) };
+      })(),
+      warnings: (() => {
+        const paired = warningsJa.map((ja, index) => ({ ja, en: warningsEn[index] || '' }))
+          .filter((item) => item.ja.trim() || item.en.trim());
+        return { ja: paired.map((item) => item.ja), en: paired.map((item) => item.en) };
+      })(),
       relatedToolIds: tool?.relatedToolIds || [],
       custom: true,
       updatedAt: new Date().toISOString().split('T')[0]
@@ -587,7 +585,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-stone-200 bg-stone-50 px-6 pt-2 shrink-0 gap-2 text-xs font-medium overflow-x-auto scrollbar-none">
+        <div className="flex flex-wrap border-b border-stone-200 bg-stone-50 px-4 pt-2 shrink-0 gap-x-1 gap-y-1 text-xs font-medium overflow-visible">
           <button
             type="button"
             onClick={() => setActiveTab('basic')}
@@ -951,6 +949,17 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
               </div>
 
               <div className="space-y-4">
+                {previewBoxes.length === 0 && (
+                  <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-center space-y-2">
+                    <Film className="w-8 h-8 mx-auto text-stone-400" />
+                    <p className="text-sm font-semibold text-stone-700">
+                      {lang === 'ja' ? 'プレビューボックスはありません' : 'No preview boxes'}
+                    </p>
+                    <p className="text-xs text-stone-500">
+                      {lang === 'ja' ? '「ボックス追加」から必要なものだけ追加できます。' : 'Add only the preview boxes you need using “Add Box”.'}
+                    </p>
+                  </div>
+                )}
                 {previewBoxes.map((pBox, bIdx) => (
                   <div key={pBox.id || bIdx} className="p-4 rounded-xl border border-orange-200/90 bg-stone-50/70 space-y-3 shadow-2xs">
                     <div className="flex items-center justify-between gap-3 pb-2 border-b border-stone-200">
@@ -1491,6 +1500,11 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
           {/* TAB 5: TIPS & WARNINGS */}
           {activeTab === 'tips' && (
             <div className="space-y-6">
+              <p className="text-xs text-stone-500">
+                {lang === 'ja'
+                  ? '日本語と英語を同じ行で編集できます。空欄の項目は保存時に除外されます。'
+                  : 'Edit Japanese and English together. Completely empty rows are omitted when saved.'}
+              </p>
               {/* Tips Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1500,14 +1514,14 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setTipsJa([...tipsJa, ''])}
+                    onClick={() => { setTipsJa((current) => [...current, '']); setTipsEn((current) => [...current, '']); }}
                     className="text-xs text-orange-600 hover:text-orange-700 font-semibold"
                   >
                     + {lang === 'ja' ? 'Tips追加' : 'Add Tip'}
                   </button>
                 </div>
                 {tipsJa.map((tip, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-center">
                     <input
                       type="text"
                       value={tip}
@@ -1516,13 +1530,30 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                         updated[idx] = e.target.value;
                         setTipsJa(updated);
                       }}
-                      placeholder="例: Spaceキーで壁のオフセット方向を素早く切り替えられます"
-                      className="flex-1 px-3 py-2 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none"
+                      placeholder="日本語のTips"
+                      aria-label={`Pro tip ${idx + 1} Japanese`}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={tipsEn[idx] || ''}
+                      onChange={(e) => {
+                        const updated = [...tipsEn];
+                        updated[idx] = e.target.value;
+                        setTipsEn(updated);
+                      }}
+                      placeholder="English tip"
+                      aria-label={`Pro tip ${idx + 1} English`}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:border-orange-500 outline-none"
                     />
                     <button
                       type="button"
-                      onClick={() => setTipsJa(tipsJa.filter((_, i) => i !== idx))}
-                      className="text-stone-400 hover:text-red-500 p-1"
+                      onClick={() => {
+                        setTipsJa((current) => current.filter((_, i) => i !== idx));
+                        setTipsEn((current) => current.filter((_, i) => i !== idx));
+                      }}
+                      className="text-stone-400 hover:text-red-500 p-1 justify-self-end"
+                      aria-label={`Delete pro tip ${idx + 1}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1531,7 +1562,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
               </div>
 
               {/* Warnings Section */}
-              <div className="space-y-3">
+              <div className="space-y-3 pt-4 border-t border-stone-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-red-700">
                     <AlertTriangle className="w-4 h-4 text-red-600" />
@@ -1539,29 +1570,46 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setWarningsJa([...warningsJa, ''])}
+                    onClick={() => { setWarningsJa((current) => [...current, '']); setWarningsEn((current) => [...current, '']); }}
                     className="text-xs text-red-600 hover:text-red-700 font-semibold"
                   >
                     + {lang === 'ja' ? '注意事項追加' : 'Add Note'}
                   </button>
                 </div>
-                {warningsJa.map((warn, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                {warningsJa.map((warning, idx) => (
+                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-center">
                     <input
                       type="text"
-                      value={warn}
+                      value={warning}
                       onChange={(e) => {
                         const updated = [...warningsJa];
                         updated[idx] = e.target.value;
                         setWarningsJa(updated);
                       }}
-                      placeholder="例: 極小の壁を作成するとIFC書き出し時にエラーになります"
-                      className="flex-1 px-3 py-2 text-xs rounded-lg border border-stone-300 focus:border-red-500 outline-none"
+                      placeholder="日本語の注意事項"
+                      aria-label={`Warning ${idx + 1} Japanese`}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:border-red-500 outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={warningsEn[idx] || ''}
+                      onChange={(e) => {
+                        const updated = [...warningsEn];
+                        updated[idx] = e.target.value;
+                        setWarningsEn(updated);
+                      }}
+                      placeholder="English warning"
+                      aria-label={`Warning ${idx + 1} English`}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:border-red-500 outline-none"
                     />
                     <button
                       type="button"
-                      onClick={() => setWarningsJa(warningsJa.filter((_, i) => i !== idx))}
-                      className="text-stone-400 hover:text-red-500 p-1"
+                      onClick={() => {
+                        setWarningsJa((current) => current.filter((_, i) => i !== idx));
+                        setWarningsEn((current) => current.filter((_, i) => i !== idx));
+                      }}
+                      className="text-stone-400 hover:text-red-500 p-1 justify-self-end"
+                      aria-label={`Delete warning ${idx + 1}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
