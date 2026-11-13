@@ -375,6 +375,14 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
                   gifUrls={box.gifUrls}
                   mediaList={box.mediaList}
                   steps={box.steps && box.steps.length > 0 ? box.steps : steps}
+                  onUpdateStep={(stepIndex, patch) => {
+                    const patchSteps = (list: StepItem[]) => list.map((st, i) => i === stepIndex ? { ...st, ...patch } : st);
+                    if (subOption.previewBoxes && subOption.previewBoxes.length > 0 && box.steps && box.steps.length > 0) {
+                      onSaveSubOption({ ...subOption, previewBoxes: previewBoxes.map((b, i) => i === idx ? { ...b, steps: patchSteps(box.steps as StepItem[]) } : b) });
+                    } else {
+                      onSaveSubOption({ ...subOption, steps: patchSteps(steps) });
+                    }
+                  }}
                   onEditBox={() => handleEditBox(idx)}
                   onDeleteBox={() => handleDeleteBox(idx)}
                   canDelete={previewBoxes.length > 1}

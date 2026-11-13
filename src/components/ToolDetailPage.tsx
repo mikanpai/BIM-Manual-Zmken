@@ -60,7 +60,7 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
     steps: tool.steps,
   };
 
-  const previewBoxes = (tool.previewBoxes && tool.previewBoxes.length > 0)
+  const previewBoxes = tool.previewBoxes !== undefined
     ? tool.previewBoxes
     : [defaultPreviewBox];
 
@@ -259,6 +259,16 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
 
             {/* Multiple Preview Tool Boxes */}
             <div className="space-y-6">
+              {previewBoxes.length === 0 && (
+                <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-center">
+                  <p className="text-sm font-semibold text-stone-700">
+                    {lang === 'ja' ? 'プレビューボックスはありません' : 'No preview boxes'}
+                  </p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    {lang === 'ja' ? '「ボックス追加」から必要なボックスを追加できます。' : 'Use “Add Box” to add a preview box when needed.'}
+                  </p>
+                </div>
+              )}
               {previewBoxes.map((box, idx) => (
                 <InteractiveCadCanvas 
                   key={box.id || idx}
@@ -272,21 +282,25 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
                   gifUrls={box.gifUrls}
                   mediaList={box.mediaList}
                   steps={box.steps && box.steps.length > 0 ? box.steps : tool.steps}
+                  onUpdateStep={onSaveTool ? (stepIndex, patch) => {
+                    const patchSteps = (list: StepItem[]) => list.map((st, i) => i === stepIndex ? { ...st, ...patch } : st);
+                    if (tool.previewBoxes !== undefined && box.steps && box.steps.length > 0) {
+                      onSaveTool({ ...tool, previewBoxes: previewBoxes.map((b, i) => i === idx ? { ...b, steps: patchSteps(box.steps as StepItem[]) } : b) });
+                    } else {
+                      onSaveTool({ ...tool, steps: patchSteps(tool.steps) });
+                    }
+                  } : undefined}
                   onEditBox={() => {
                     setEditingBoxIndex(idx);
                     setIsBoxModalOpen(true);
                   }}
                   onDeleteBox={() => {
-                    if (previewBoxes.length <= 1) {
-                      alert(lang === 'ja' ? '最低1つのプレビューボックスが必要です。' : 'At least one preview box is required.');
-                      return;
-                    }
                     const updated = previewBoxes.filter((_, i) => i !== idx);
                     if (onSaveTool) {
                       onSaveTool({ ...tool, previewBoxes: updated });
                     }
                   }}
-                  canDelete={previewBoxes.length > 1}
+                  canDelete={true}
                 />
               ))}
             </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Language, PreviewMediaItem, StepItem } from '../types/manual';
 import { 
-  Play, Pause, ChevronLeft, ChevronRight, Film, Edit3, Trash2, Eye,
+  Play, Pause, ChevronLeft, ChevronRight, Film, Edit3, Trash2, Eye, Check, X,
   Video, Image as ImageIcon, Sparkles, Layers, Maximize2, Minimize2
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
@@ -18,6 +18,7 @@ interface InteractiveCadCanvasProps {
   mediaList?: PreviewMediaItem[];
   steps?: StepItem[];
   onEditBox?: () => void;
+  onUpdateStep?: (stepIndex: number, patch: { title?: { ja: string; en: string }; instruction?: { ja: string; en: string } }) => void;
   onDeleteBox?: () => void;
   canDelete?: boolean;
 }
@@ -34,12 +35,17 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
   mediaList,
   steps = [],
   onEditBox,
+  onUpdateStep,
   onDeleteBox,
   canDelete = false,
 }) => {
   const totalSteps = steps.length > 0 ? steps.length : 4;
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Inline step text editing
+  const [isEditingStep, setIsEditingStep] = useState(false);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftInstruction, setDraftInstruction] = useState('');
   const [isMediaExpanded, setIsMediaExpanded] = useState(false);
 
   // Consolidate media files list (supports 2, 3, or more GIFs/WebMs)
@@ -93,6 +99,8 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
     if (mediaIndex >= 0) setActiveMediaIndex(mediaIndex);
   }, [consolidatedMedia, currentStepIndex, steps]);
 
+  useEffect(() => { setIsEditingStep(false); }, [currentStepIndex, lang]);
+
   // Auto-play timer when play is active
   useEffect(() => {
     if (!isPlaying) return;
@@ -132,6 +140,22 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
   // Media navigation
   // Current active step information
   const activeStep = steps[currentStepIndex];
+
+  const startEditStep = () => {
+    setIsPlaying(false);
+    setDraftTitle(activeStep?.title ? (lang === 'ja' ? activeStep.title.ja : activeStep.title.en) : '');
+    setDraftInstruction(activeStep?.instruction ? (lang === 'ja' ? activeStep.instruction.ja : activeStep.instruction.en) : '');
+    setIsEditingStep(true);
+  };
+
+  const saveEditStep = () => {
+    if (!onUpdateStep) return;
+    onUpdateStep(currentStepIndex, {
+      title: { ja: lang === 'ja' ? draftTitle : (activeStep?.title?.ja ?? ''), en: lang === 'en' ? draftTitle : (activeStep?.title?.en ?? '') },
+      instruction: { ja: lang === 'ja' ? draftInstruction : (activeStep?.instruction?.ja ?? ''), en: lang === 'en' ? draftInstruction : (activeStep?.instruction?.en ?? '') },
+    });
+    setIsEditingStep(false);
+  };
 
   // Active media item
   const currentMedia = consolidatedMedia[activeMediaIndex];
@@ -623,22 +647,65 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
           </button>
         </div>
 
-        {/* Current Active Step Instruction Description */}
-                <div className="p-3 bg-stone-50/80 rounded-xl border border-stone-200 flex items-start gap-2.5 text-xs text-stone-700">
-          <div className="flex-1 leading-relaxed">
-            <span className="font-bold text-stone-900 mr-2">
-              {activeStep?.title
-                ? (lang === 'ja' ? activeStep.title.ja : activeStep.title.en)
-                : (lang === 'ja' ? `操作項目 ${currentStepIndex + 1}` : `Operation ${currentStepIndex + 1}`)}:
-            </span>
-            <span>
-              {activeStep?.instruction
-                ? (lang === 'ja' ? activeStep.instruction.ja : activeStep.instruction.en)
-                : (lang === 'ja'
-                    ? '矢印ボタンで項目を前後に移動しながら操作方法を確認できます。'
-                    : 'Use the arrow buttons to navigate between instructions.')}
-            </span>
-          </div>
+        {/* Current Active Step Instruction Description (click the pencil to edit in place) */}
+        <div className="p-3 bg-stone-50/80 rounded-xl border border-stone-200 flex items-start gap-2.5 text-xs text-stone-700">
+          {isEditingStep ? (
+            <div className="flex-1 space-y-2">
+              <input
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                placeholder={lang === 'ja' ? 'ステップ名' : 'Step title'}
+                className="w-full rounded-lg border border-stone-300 focus:border-orange-500 focus:outline-none px-2 py-1.5 text-xs font-bold text-stone-900 bg-white"
+                autoFocus
+              />
+              <textarea
+                value={draftInstruction}
+                onChange={(e) => setDraftInstruction(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setIsEditingStep(false);
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveEditStep();
+                }}
+                rows={3}
+                placeholder={lang === 'ja' ? '説明文' : 'Instruction'}
+                className="w-full rounded-lg border border-stone-300 focus:border-orange-500 focus:outline-none px-2 py-1.5 text-xs text-stone-700 bg-white leading-relaxed"
+              />
+              <div className="flex items-center gap-2">
+                <button onClick={saveEditStep} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition">
+                  <Check className="w-3.5 h-3.5" />{lang === 'ja' ? '保存' : 'Save'}
+                </button>
+                <button onClick={() => setIsEditingStep(false)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-stone-300 hover:border-stone-400 text-stone-600 text-xs transition">
+                  <X className="w-3.5 h-3.5" />{lang === 'ja' ? 'キャンセル' : 'Cancel'}
+                </button>
+                <span className="text-[10px] text-stone-400 hidden sm:inline">Ctrl+Enter = {lang === 'ja' ? '保存' : 'Save'} / Esc = {lang === 'ja' ? '取消' : 'Cancel'}</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex-1 leading-relaxed">
+                <span className="font-bold text-stone-900 mr-2">
+                  {activeStep?.title
+                    ? (lang === 'ja' ? activeStep.title.ja : activeStep.title.en)
+                    : (lang === 'ja' ? `操作項目 ${currentStepIndex + 1}` : `Operation ${currentStepIndex + 1}`)}:
+                </span>
+                <span className="whitespace-pre-wrap">
+                  {activeStep?.instruction
+                    ? (lang === 'ja' ? activeStep.instruction.ja : activeStep.instruction.en)
+                    : (lang === 'ja'
+                        ? '矢印ボタンで項目を前後に移動しながら操作方法を確認できます。'
+                        : 'Use the arrow buttons to navigate between instructions.')}
+                </span>
+              </div>
+              {onUpdateStep && activeStep && (
+                <button
+                  onClick={startEditStep}
+                  className="shrink-0 p-1.5 rounded-lg border border-stone-200 hover:border-orange-500 bg-white text-stone-500 hover:text-orange-600 transition"
+                  title={lang === 'ja' ? 'このテキストだけ編集' : 'Edit this text only'}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
