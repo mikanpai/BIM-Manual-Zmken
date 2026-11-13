@@ -32,6 +32,7 @@ interface RibbonBarProps {
   onNavigateHome: () => void;
   isPaletteVisible?: boolean;
   activeToolId?: string | null; // tool whose page is currently open
+  activeSubOptionId?: string | null; // sub-option whose page is currently open
   lang: Language;
 }
 
@@ -47,14 +48,17 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
   onNavigateHome,
   isPaletteVisible = true,
   activeToolId = null,
+  activeSubOptionId = null,
   lang,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
-  const [selectedSubOption, setSelectedSubOption] = useState<{
-    toolId: string;
-    subOptionId: string;
-  } | null>(null);
+  // The highlighted tool / sub-option always follows the page that is actually open
+  // (from App), no matter how you got there: ribbon, quick-access bubble, link, back button.
+  const selectedToolId: string | null = activeToolId;
+  const selectedSubOption: { toolId: string; subOptionId: string } | null =
+    activeToolId && activeSubOptionId
+      ? { toolId: activeToolId, subOptionId: activeSubOptionId }
+      : null;
 
   // Which tool of each dropdown currently "covers" the dropdown button.
   // Only lives in this session: after a refresh every dropdown shows its original cover icon again.
@@ -179,8 +183,6 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
       const groupId = tool.dropdownGroup;
       setCoverToolByGroup((prev) => ({ ...prev, [groupId]: tool.id }));
     }
-    setSelectedToolId(tool.id);
-    setSelectedSubOption(null);
     closeDropdown();
     onSelectTool(tool);
   };
@@ -189,12 +191,6 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
     parentTool: ToolItem,
     subOption: SubOptionItem
   ) => {
-    setSelectedToolId(parentTool.id);
-    setSelectedSubOption({
-      toolId: parentTool.id,
-      subOptionId: subOption.id,
-    });
-
     closeDropdown();
 
     if (onSelectSubOption) {

@@ -559,6 +559,7 @@ export default function App() {
         }}
         onSelectTool={handleSelectTool}
         activeToolId={selectedTool?.id ?? null}
+        activeSubOptionId={selectedSubOption?.subOption.id ?? null}
         onSelectSubOption={handleSelectSubOption}
         onAddNewTool={handleAddNewTool}
         onAddSubOption={handleStartAddSubOption}
