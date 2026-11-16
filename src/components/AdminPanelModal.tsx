@@ -1,6 +1,7 @@
 import { removeToolFromList, convertSubOptionsToDropdown } from '../lib/toolOps';
 import React, { useState, useEffect } from 'react';
 import { CategoryInfo, CompanySettings, Language, SupabaseConfig, ToolItem } from '../types/manual';
+import { useDeletePin } from './DeletePinProvider';
 import { 
   X, Check, Plus, Trash2, ArrowUp, ArrowDown, Sliders, 
   Building2, Layers, Film, RotateCcw, Download, Upload, ShieldCheck, Sparkles,
@@ -85,6 +86,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   initialTab = 'categories',
   lang,
 }) => {
+  const confirmDelete = useDeletePin();
   const [activeTab, setActiveTab] = useState<'categories' | 'sort' | 'ribbon_groupings' | 'ribbon_dropdowns' | 'preview_tool' | 'company' | 'backup' | 'supabase'>(initialTab);
 
   // Categories local state
@@ -309,7 +311,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   };
 
   // Remove Category
-  const removeCategory = (index: number) => {
+  const removeCategory = async (index: number) => {
     if (localCategories.length <= 1) {
       alert(lang === 'ja' ? '最低1つのカテゴリが必要です。' : 'At least one category is required.');
       return;
@@ -318,7 +320,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     const confirmMsg = lang === 'ja'
       ? `カテゴリ「${cat.name.ja}」と、このカテゴリ内の${localTools.filter((tool) => tool.categoryId === cat.id).length}件のツールを削除しますか？`
       : `Delete category "${cat.name.en}" and its ${localTools.filter((tool) => tool.categoryId === cat.id).length} tool(s)?`;
-    if (window.confirm(confirmMsg)) {
+    if (await confirmDelete(confirmMsg, lang)) {
       const updated = localCategories.filter((_, i) => i !== index);
       setLocalCategories(updated);
       // A deleted ribbon category must not leave orphan tools to reappear
@@ -498,11 +500,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     );
   };
 
-  const handleDeleteGroup = (groupJa: string) => {
+  const handleDeleteGroup = async (groupJa: string) => {
     const confirmMsg = lang === 'ja'
       ? `グループ「${groupJa}」を削除しますか？\n所属ツールは「一般ツール」グループに移動されます。`
       : `Delete group "${groupJa}"? Tools will be moved to General Tools.`;
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await confirmDelete(confirmMsg, lang))) return;
 
     setLocalTools((prev) =>
       prev.map((t) => {
@@ -835,11 +837,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   };
 
   // Delete a tool (applied when "Save & Apply" is pressed)
-  const handleDeleteTool = (tool: ToolItem) => {
+  const handleDeleteTool = async (tool: ToolItem) => {
     const msg = lang === 'ja'
       ? `ツール「${tool.name.ja}」を削除しますか？\n（「保存して適用」を押すと反映されます）`
       : `Delete tool "${tool.name.en || tool.name.ja}"?\n(Applied when you press Save & Apply)`;
-    if (!window.confirm(msg)) return;
+    if (!(await confirmDelete(msg, lang))) return;
     setLocalTools((prev) => removeToolFromList(prev, tool.id));
   };
 

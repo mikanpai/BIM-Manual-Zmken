@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Language, PreviewMediaItem, StepItem } from '../types/manual';
 import { 
-  Play, Pause, ChevronLeft, ChevronRight, Film, Edit3, Trash2, Eye, Check, X,
+  ChevronLeft, ChevronRight, Film, Edit3, Trash2, Eye, Check, X,
   Video, Image as ImageIcon, Sparkles, Layers, Maximize2, Minimize2
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
+import { useDeletePin } from './DeletePinProvider';
 
 interface InteractiveCadCanvasProps {
   toolType: string;
@@ -39,9 +40,9 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
   onDeleteBox,
   canDelete = false,
 }) => {
+  const confirmDelete = useDeletePin();
   const totalSteps = steps.length > 0 ? steps.length : 4;
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   // Inline step text editing
   const [isEditingStep, setIsEditingStep] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
@@ -101,28 +102,16 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
 
   useEffect(() => { setIsEditingStep(false); }, [currentStepIndex, lang]);
 
-  // Auto-play timer when play is active
-  useEffect(() => {
-    if (!isPlaying) return;
-    const timer = setInterval(() => {
-      setCurrentStepIndex((prev) => (prev + 1) % totalSteps);
-    }, 2800);
-    return () => clearInterval(timer);
-  }, [isPlaying, totalSteps]);
-
   // Navigation handlers
   const handlePrevStep = () => {
-    setIsPlaying(false);
     setCurrentStepIndex((prev) => (prev > 0 ? prev - 1 : totalSteps - 1));
   };
 
   const handleNextStep = () => {
-    setIsPlaying(false);
     setCurrentStepIndex((prev) => (prev < totalSteps - 1 ? prev + 1 : 0));
   };
 
   const handleStepClick = (index: number) => {
-    setIsPlaying(false);
     setCurrentStepIndex(index);
   };
 
@@ -142,7 +131,6 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
   const activeStep = steps[currentStepIndex];
 
   const startEditStep = () => {
-    setIsPlaying(false);
     setDraftTitle(activeStep?.title ? (lang === 'ja' ? activeStep.title.ja : activeStep.title.en) : '');
     setDraftInstruction(activeStep?.instruction ? (lang === 'ja' ? activeStep.instruction.ja : activeStep.instruction.en) : '');
     setIsEditingStep(true);
@@ -367,21 +355,15 @@ export const InteractiveCadCanvas: React.FC<InteractiveCadCanvasProps> = ({
 
           {canDelete && onDeleteBox && (
             <button
-              onClick={onDeleteBox}
+              onClick={async () => {
+                if (await confirmDelete(lang === 'ja' ? 'このプレビューボックスを削除しますか？' : 'Delete this preview box?', lang)) onDeleteBox();
+              }}
               className="p-1.5 rounded-lg border border-stone-200 hover:border-red-500 bg-white text-stone-400 hover:text-red-600 transition shadow-2xs"
               title={lang === 'ja' ? 'このボックスを削除' : 'Delete Box'}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           )}
-
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 hover:border-orange-500 text-stone-700 text-xs font-semibold shadow-2xs transition"
-          >
-            {isPlaying ? <Pause className="w-3.5 h-3.5 text-orange-600" /> : <Play className="w-3.5 h-3.5 text-orange-600" />}
-            <span>{isPlaying ? (lang === 'ja' ? '一時停止' : 'Pause') : (lang === 'ja' ? '自動再生' : 'Auto Play')}</span>
-          </button>
         </div>
       </div>
 

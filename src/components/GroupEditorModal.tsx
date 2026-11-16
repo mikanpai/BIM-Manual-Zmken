@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDeletePin } from './DeletePinProvider';
 import { CategoryInfo, Language, RibbonCategoryId, ToolItem } from '../types/manual';
 import { CadIcon } from './CadIcon';
 import { 
@@ -41,6 +42,7 @@ export const GroupEditorModal: React.FC<GroupEditorModalProps> = ({
   onAddNewToolToGroup,
   lang,
 }) => {
+  const confirmDelete = useDeletePin();
   const [selectedCatId, setSelectedCatId] = useState<RibbonCategoryId>(category.id);
   const [nameJa, setNameJa] = useState(groupNameJa);
   const [nameEn, setNameEn] = useState(groupNameEn);
@@ -95,13 +97,13 @@ export const GroupEditorModal: React.FC<GroupEditorModalProps> = ({
     onClose();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!onDeleteGroup) return;
     const confirmMsg = lang === 'ja'
       ? `グループ「${groupNameJa}」を削除しますか？\n所属ツールは「一般ツール」グループに移動されます。`
       : `Delete group "${groupNameEn || groupNameJa}"? Assigned tools will be moved to General group.`;
     
-    if (window.confirm(confirmMsg)) {
+    if (await confirmDelete(confirmMsg, lang)) {
       onDeleteGroup(groupNameJa, '一般ツール');
       onClose();
     }

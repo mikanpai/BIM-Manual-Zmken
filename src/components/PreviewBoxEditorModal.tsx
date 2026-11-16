@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { CadIcon } from './CadIcon';
 import { uploadMediaFile } from '../lib/supabase';
+import { useDeletePin } from './DeletePinProvider';
 
 interface PreviewBoxEditorModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
   onSave,
   lang,
 }) => {
+  const confirmDelete = useDeletePin();
   const isEditing = !!box;
 
   const [boxTitleJa, setBoxTitleJa] = useState(box?.boxTitle?.ja || 'プレビューツール');
@@ -183,8 +185,31 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
     setMediaList(updated);
   };
 
+  // Auto-generated titles ("GIF 5: 手順デモ" / "Demo GIF 5") carry a number that goes
+  // stale when items are reordered. Renumber only titles that still match the auto
+  // pattern; titles you typed yourself are left untouched.
+  const renumberAutoTitles = (list: PreviewMediaItem[]): PreviewMediaItem[] =>
+    list.map((item, i) => {
+      if (!item.title) return item;
+      const n = i + 1;
+      const ja = item.title.ja.replace(/^(GIF )\d+(: 手順デモ)$/, `$1${n}$2`);
+      const en = item.title.en.replace(/^(Demo GIF )\d+$/, `$1${n}`);
+      return ja === item.title.ja && en === item.title.en ? item : { ...item, title: { ja, en } };
+    });
+
   const handleRemoveMedia = (index: number) => {
-    setMediaList(mediaList.filter((_, i) => i !== index));
+    setMediaList(renumberAutoTitles(mediaList.filter((_, i) => i !== index)));
+  };
+
+  // Pair step 1 -> media 1, step 2 -> media 2, ... (only touches the link, never the files)
+  const handleMatchStepsToMedia = () => {
+    const msg = lang === 'ja'
+      ? 'ステップ1→GIF 1、ステップ2→GIF 2…の順に紐づけ直します。ステップごとに手動で選んだ紐づけは上書きされます。よろしいですか？'
+      : 'Re-link step 1 → media 1, step 2 → media 2, … This overwrites any link you picked manually per step. Continue?';
+    if (!window.confirm(msg)) return;
+    const usable = mediaList.filter((m) => m.url.trim());
+    setMediaList(renumberAutoTitles(mediaList));
+    setSteps(steps.map((s, i) => (usable[i] ? { ...s, mediaId: usable[i].id } : s)));
   };
 
   const handleMoveMedia = (index: number, direction: 'up' | 'down') => {
@@ -195,7 +220,15 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
     const temp = updated[index];
     updated[index] = updated[targetIdx];
     updated[targetIdx] = temp;
-    setMediaList(updated);
+    const renumbered = renumberAutoTitles(updated);
+    // Steps that were paired with "the media in the same position" stay position-paired;
+    // steps you linked to some other media keep following that media by id.
+    setSteps(steps.map((s, i) =>
+      s.mediaId && s.mediaId === mediaList[i]?.id && renumbered[i]
+        ? { ...s, mediaId: renumbered[i].id }
+        : s
+    ));
+    setMediaList(renumbered);
   };
 
   const handleStepChange = (index: number, field: 'titleJa' | 'titleEn' | 'instructionJa' | 'instructionEn', value: string) => {
@@ -522,7 +555,7 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleRemoveMedia(idx)}
+                            onClick={async () => { if (await confirmDelete(lang === 'ja' ? 'このGIF / 動画を削除しますか？' : 'Delete this GIF / video?', lang)) { handleRemoveMedia(idx); } }}
                             className="p-1 rounded text-stone-400 hover:text-red-600 transition cursor-pointer"
                             title="Delete"
                           >
@@ -696,10 +729,15 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
           <div className="space-y-3">
             <div className="font-bold text-stone-900 text-xs flex items-center justify-between">
               <span>{lang === 'ja' ? '手動矢印バーステップ (1, 2, 3, 4)' : 'Manual Step Scrubber Steps (1, 2, 3, 4)'}</span>
-              <button type="button" onClick={addStep} className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-bold text-orange-700 hover:bg-orange-100">
-                <Plus className="w-3 h-3" />
-                {lang === 'ja' ? 'ステップ追加' : 'Add Step'}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={handleMatchStepsToMedia} className="inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2 py-1 text-[10px] font-bold text-stone-600 hover:bg-stone-50">
+                  {lang === 'ja' ? 'GIFの順番に合わせる' : 'Match steps to GIF order'}
+                </button>
+                <button type="button" onClick={addStep} className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-bold text-orange-700 hover:bg-orange-100">
+                  <Plus className="w-3 h-3" />
+                  {lang === 'ja' ? 'ステップ追加' : 'Add Step'}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2.5">
@@ -726,7 +764,7 @@ export const PreviewBoxEditorModal: React.FC<PreviewBoxEditorModalProps> = ({
                         className="w-full px-2.5 py-1 text-xs rounded border border-stone-300 bg-white font-medium"
                       />
                     </div>
-                    <button type="button" onClick={() => removeStep(idx)} className="rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600" title={lang === 'ja' ? 'ステップを削除' : 'Remove step'}>
+                    <button type="button" onClick={async () => { if (await confirmDelete(lang === 'ja' ? 'このステップを削除しますか？' : 'Delete this step?', lang)) { removeStep(idx); } }} className="rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600" title={lang === 'ja' ? 'ステップを削除' : 'Remove step'}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>

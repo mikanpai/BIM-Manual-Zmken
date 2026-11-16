@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDeletePin } from './DeletePinProvider';
 import { CategoryInfo, CompanySettings, Language } from '../types/manual';
 import { 
   X, Check, Plus, Trash2, ArrowUp, ArrowDown, 
@@ -24,6 +25,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   onSaveCompanySettings,
   lang,
 }) => {
+  const confirmDelete = useDeletePin();
   const [activeTab, setActiveTab] = useState<'categories' | 'preview_settings' | 'company'>('categories');
   const [categoryList, setCategoryList] = useState<CategoryInfo[]>(categories);
   const [settingsData, setSettingsData] = useState<CompanySettings>(companySettings);
@@ -71,12 +73,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setCategoryList([...categoryList, newCat]);
   };
 
-  const removeCategory = (id: string) => {
+  const removeCategory = async (id: string) => {
     if (categoryList.length <= 1) {
       alert(lang === 'ja' ? '最低1つのカテゴリが必要です。' : 'At least one category is required.');
       return;
     }
-    if (confirm(lang === 'ja' ? 'このカテゴリタブを削除しますか？' : 'Delete this category tab?')) {
+    if (await confirmDelete(lang === 'ja' ? 'このカテゴリタブを削除しますか？' : 'Delete this category tab?', lang)) {
       setCategoryList(categoryList.filter(c => c.id !== id));
     }
   };

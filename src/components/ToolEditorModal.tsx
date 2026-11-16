@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDeletePin } from './DeletePinProvider';
 import { CategoryInfo, Language, RibbonCategoryId, ToolItem, StepItem, MediaItem, SubOptionItem, PreviewBoxItem } from '../types/manual';
 import { 
   X, Check, Plus, Trash2, Upload, Image as ImageIcon, 
@@ -29,6 +30,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
   onSave,
   lang,
 }) => {
+  const confirmDelete = useDeletePin();
   const isEditing = !!tool;
 
   const [categoryId, setCategoryId] = useState<RibbonCategoryId>(
@@ -975,7 +977,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                       {previewBoxes.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removePreviewBox(bIdx)}
+                          onClick={async () => { if (await confirmDelete(lang === 'ja' ? 'このプレビューボックスを削除しますか？' : 'Delete this preview box?', lang)) { removePreviewBox(bIdx); } }}
                           className="p-1 text-stone-400 hover:text-red-600 transition"
                           title="Delete Box"
                         >
@@ -1183,7 +1185,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                         </div>
                         <button
                           type="button"
-                          onClick={() => removeSubOption(idx)}
+                          onClick={async () => { if (await confirmDelete(lang === 'ja' ? 'このサブコマンドを削除しますか？' : 'Delete this sub-command?', lang)) { removeSubOption(idx); } }}
                           className="p-1 text-stone-400 hover:text-red-600 transition"
                           title="Delete"
                         >
@@ -1300,7 +1302,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                       {steps.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removeStep(index)}
+                          onClick={async () => { if (await confirmDelete(lang === 'ja' ? 'このステップを削除しますか？' : 'Delete this step?', lang)) { removeStep(index); } }}
                           className="p-1 rounded text-stone-400 hover:text-red-600 hover:bg-red-50 transition"
                           title="Delete Step"
                         >
@@ -1485,7 +1487,7 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => removeMedia(idx)}
+                      onClick={async () => { if (await confirmDelete(lang === 'ja' ? 'この画像 / GIFを削除しますか？' : 'Delete this image / GIF?', lang)) { removeMedia(idx); } }}
                       className="absolute top-2 right-2 p-1.5 rounded-lg bg-stone-900/60 text-white hover:bg-red-600 transition"
                       title="Delete Media"
                     >
@@ -1548,7 +1550,8 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
+                        if (!(await confirmDelete(lang === 'ja' ? 'このコツを削除しますか？' : 'Delete this pro tip?', lang))) return;
                         setTipsJa((current) => current.filter((_, i) => i !== idx));
                         setTipsEn((current) => current.filter((_, i) => i !== idx));
                       }}
@@ -1604,7 +1607,8 @@ export const ToolEditorModal: React.FC<ToolEditorModalProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
+                        if (!(await confirmDelete(lang === 'ja' ? 'この注意事項を削除しますか？' : 'Delete this warning?', lang))) return;
                         setWarningsJa((current) => current.filter((_, i) => i !== idx));
                         setWarningsEn((current) => current.filter((_, i) => i !== idx));
                       }}
