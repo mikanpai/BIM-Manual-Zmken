@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
 import { SubOptionEditorModal } from './SubOptionEditorModal';
+import { InlineEditableText } from './InlineEditableText';
 
 interface SubOptionDetailPageProps {
   tool: ToolItem; // Parent tool
@@ -328,15 +329,22 @@ export const SubOptionDetailPage: React.FC<SubOptionDetailPageProps> = ({
                 {lang === 'ja' ? '機能概要 & 仕様用途' : 'Overview & BIM Functionality'}
               </h2>
             </div>
-            <p className="text-sm text-stone-700 leading-relaxed font-normal whitespace-pre-line">
-              {subOption.fullDesc 
+            <InlineEditableText
+              value={subOption.fullDesc
                 ? (lang === 'ja' ? subOption.fullDesc.ja : subOption.fullDesc.en)
-                : subOption.desc 
+                : subOption.desc
                 ? (lang === 'ja' ? subOption.desc.ja : subOption.desc.en)
-                : (lang === 'ja' 
-                    ? `GLOOBEの「${subOption.name.ja}」は、親ツール「${tool.name.ja}」のサブコマンド・派生機能として実行されます。` 
+                : (lang === 'ja'
+                    ? `GLOOBEの「${subOption.name.ja}」は、親ツール「${tool.name.ja}」のサブコマンド・派生機能として実行されます。`
                     : `The GLOOBE command "${subOption.name.en}" is a specialized sub-option of ${tool.name.en}.`)}
-            </p>
+              lang={lang}
+              onSave={(text) => {
+                const other: Language = lang === 'ja' ? 'en' : 'ja';
+                const base = subOption.fullDesc ?? { ja: subOption.desc?.ja ?? '', en: subOption.desc?.en ?? '' };
+                onSaveSubOption({ ...subOption, fullDesc: { ...base, [lang]: text, [other]: base[other] } });
+              }}
+              className="text-sm text-stone-700 leading-relaxed font-normal whitespace-pre-line"
+            />
           </div>
 
           {/* Section 2: PREVIEW TOOL */}

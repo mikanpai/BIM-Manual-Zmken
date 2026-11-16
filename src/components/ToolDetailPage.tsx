@@ -9,6 +9,7 @@ import {
   ExternalLink, Plus, Check, Layers
 } from 'lucide-react';
 import { PreviewBoxEditorModal } from './PreviewBoxEditorModal';
+import { InlineEditableText } from './InlineEditableText';
 
 interface ToolDetailPageProps {
   tool: ToolItem;
@@ -228,9 +229,12 @@ export const ToolDetailPage: React.FC<ToolDetailPageProps> = ({
                 {lang === 'ja' ? '機能概要 & 設計用途' : 'Overview & BIM Functionality'}
               </h2>
             </div>
-            <p className="text-sm text-stone-700 leading-relaxed font-normal whitespace-pre-line">
-              {lang === 'ja' ? tool.fullDesc.ja : tool.fullDesc.en}
-            </p>
+            <InlineEditableText
+              value={lang === 'ja' ? tool.fullDesc.ja : tool.fullDesc.en}
+              lang={lang}
+              onSave={onSaveTool ? (text) => onSaveTool({ ...tool, fullDesc: { ...tool.fullDesc, [lang]: text } }) : undefined}
+              className="text-sm text-stone-700 leading-relaxed font-normal whitespace-pre-line"
+            />
           </div>
 
           {/* Section 2: PREVIEW TOOL */}
